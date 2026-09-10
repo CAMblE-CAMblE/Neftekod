@@ -1,0 +1,39 @@
+{
+  "state": {
+    "timestamp": "2026-09-09T12:00:00",
+    "tags": {"AVT_T101": 350.2, "HDT_P201": 45.1, "blend_ratio_A": 0.6},
+    "lims_age_minutes": 90,
+    "pak_age_minutes": 15,
+    "data_freshness": "fresh",
+    "notes": ""
+  },
+  "quality": {
+    "predicted_quality": {"sulfur_mg_kg": 6.5},
+    "spec_violation_risk": 0.05,
+    "confidence": 0.9,
+    "assumptions": []
+  },
+  "reliability": {
+    "risk_index": 0.1,
+    "risk_class": "low",
+    "risk_factors": [],
+    "regime_allowed": true,
+    "optimization_constraints": {"AVT_T101": [330.0, 365.0]},
+    "assumptions": []
+  },
+  "optimization": {
+    "scenarios": [
+      {
+        "scenario_id": "keep_current",
+        "parameter_changes": {},
+        "expected_quality": {"sulfur_mg_kg": 6.5},
+        "expected_throughput_delta": 0.0,
+        "expected_energy_cost_proxy": 0.0,
+        "expected_risk_index": 0.1,
+        "within_hard_limits": true,
+        "notes": "без изменений — режим уже в норме"
+      }
+    ],
+    "assumptions": []
+  }
+}

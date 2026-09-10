@@ -1,0 +1,49 @@
+{
+  "state": {
+    "timestamp": "2026-09-09T18:00:00",
+    "tags": {"AVT_T101": 355.0, "HDT_P201": 46.0},
+    "lims_age_minutes": 1800,
+    "pak_age_minutes": 200,
+    "data_freshness": "stale",
+    "notes": "ПАК временно недоступен, последний ЛИМС давно"
+  },
+  "quality": {
+    "predicted_quality": {"sulfur_mg_kg": 8.0},
+    "spec_violation_risk": 0.5,
+    "confidence": 0.3,
+    "assumptions": ["низкая уверенность из-за устаревшего ЛИМС"]
+  },
+  "reliability": {
+    "risk_index": 0.2,
+    "risk_class": "medium",
+    "risk_factors": [],
+    "regime_allowed": true,
+    "optimization_constraints": {"AVT_T101": [330.0, 365.0]},
+    "assumptions": []
+  },
+  "optimization": {
+    "scenarios": [
+      {
+        "scenario_id": "raise_temp",
+        "parameter_changes": {"AVT_T101": 372.0},
+        "expected_quality": {"sulfur_mg_kg": 7.0},
+        "expected_throughput_delta": 0.05,
+        "expected_energy_cost_proxy": 0.02,
+        "expected_risk_index": 0.3,
+        "within_hard_limits": true,
+        "notes": "температура выходит за заданный диапазон [330, 365]"
+      },
+      {
+        "scenario_id": "raise_pressure",
+        "parameter_changes": {"HDT_P201": 49.0},
+        "expected_quality": {"sulfur_mg_kg": 12.5},
+        "expected_throughput_delta": 0.02,
+        "expected_energy_cost_proxy": 0.01,
+        "expected_risk_index": 0.28,
+        "within_hard_limits": true,
+        "notes": "нарушает предел по сере"
+      }
+    ],
+    "assumptions": []
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "state": {
+    "timestamp": "2026-09-09T14:30:00",
+    "tags": {"AVT_T101": 358.0, "HDT_P201": 44.0, "blend_ratio_A": 0.55},
+    "lims_age_minutes": 120,
+    "pak_age_minutes": 10,
+    "data_freshness": "fresh",
+    "notes": ""
+  },
+  "quality": {
+    "predicted_quality": {"sulfur_mg_kg": 9.6},
+    "spec_violation_risk": 0.4,
+    "confidence": 0.75,
+    "assumptions": ["прогноз серы основан на прокси-модели ВАК, см. README"]
+  },
+  "reliability": {
+    "risk_index": 0.3,
+    "risk_class": "medium",
+    "risk_factors": [],
+    "regime_allowed": true,
+    "optimization_constraints": {"AVT_T101": [330.0, 365.0], "HDT_P201": [30.0, 50.0]},
+    "assumptions": []
+  },
+  "optimization": {
+    "scenarios": [
+      {
+        "scenario_id": "lower_temp",
+        "parameter_changes": {"AVT_T101": 352.0},
+        "expected_quality": {"sulfur_mg_kg": 8.1},
+        "expected_throughput_delta": -0.02,
+        "expected_energy_cost_proxy": -0.01,
+        "expected_risk_index": 0.25,
+        "within_hard_limits": true,
+        "notes": ""
+      },
+      {
+        "scenario_id": "raise_pressure",
+        "parameter_changes": {"HDT_P201": 47.5},
+        "expected_quality": {"sulfur_mg_kg": 11.2},
+        "expected_throughput_delta": 0.03,
+        "expected_energy_cost_proxy": null,
+        "expected_risk_index": 0.35,
+        "within_hard_limits": true,
+        "notes": "нарушает предел серы — будет отфильтрован жёсткой проверкой"
+      }
+    ],
+    "assumptions": []
+  }
+}
