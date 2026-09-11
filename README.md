@@ -27,6 +27,7 @@ pip install -r requirements.txt
 data/
   ЛИМСы ... .xlsx
   Выгрузка_ПАК ... .xlsx
+  242000_tags.csv
 ```
 `quality_formulas.py` датасета не требует — считает по строке тегов,
 которую ему передают (см. ниже).
