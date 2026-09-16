@@ -48,8 +48,8 @@ class ReliabilityAgent:
         window = self.u242.window(timestamp, cfg["severity"]["window_steady"])
         history = self.u242.history(timestamp)
 
-        # Блок A: состояние
-        state = detect_state(window, row, cfg)
+        # Блок A: состояние (норма — по глобальной истории)
+        state = detect_state(window, row, cfg, history=history)
 
         # если установка стоит/пускается/переходный, то риск максимальный, рекомендаций нет
         if not state.regime_allowed:

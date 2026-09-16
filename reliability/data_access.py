@@ -10,11 +10,8 @@
 """
 
 from __future__ import annotations
-
 from pathlib import Path
-
 import pandas as pd
-
 
 def _drop_service_cols(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=[c for c in df.columns if c.startswith("Unnamed")], errors="ignore")
@@ -47,10 +44,10 @@ class TelemetrySource:
 
     @property
     def index(self) -> pd.DatetimeIndex:
-        return self.df.index  # type: ignore[return-value]
+        return self.df.index
 
     def snapshot(self, ts) -> pd.Series:
-        """Последняя строка на момент ts (без утечки будущего)"""
+        """Последняя строка на момент ts"""
         ts = pd.Timestamp(ts)
         sub = self.df.loc[:ts]
         if sub.empty:
@@ -58,7 +55,7 @@ class TelemetrySource:
         return sub.iloc[-1]
 
     def window(self, ts, periods: int) -> pd.DataFrame:
-        """Последние `periods` точек по времени, заканчивая на ts (t <= ts)"""
+        """Последние periods точек по времени, заканчивая на ts (t <= ts)"""
         ts = pd.Timestamp(ts)
         return self.df.loc[:ts].tail(periods)
 

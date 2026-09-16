@@ -126,7 +126,7 @@ def compute_severity(history: pd.DataFrame, row: pd.Series, cfg: dict, drift_z: 
                 factors.append("низкое соотношение газ/сырьё -> риск коксования катализатора")
     contrib["gas_feed_ratio"] = f_gas
 
-    # drift
+    # дрифт
     f_drift = _clip01(abs(drift_z) / (2 * cfg["state_detector"]["transient_z"]))
     contrib["drift"] = f_drift
 
