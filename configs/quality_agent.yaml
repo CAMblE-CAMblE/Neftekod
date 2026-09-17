@@ -1,0 +1,67 @@
+data:
+  telemetry_path: data/242000_tags.csv
+  pak_path: null
+  lims_path: null
+  prepared_path: null
+  timestamp_col: date
+  pak_target_tag: "24-2000:Mg.Sulfur"
+  input_lims_sampling_point: "Гидроочистка:1"
+  input_lims_parameter: "Mass.Sulfur"
+  output_lims_sampling_point: "Гидроочистка:2"
+  output_lims_parameter: "Mg.Sulfur"
+lims:
+  assumed_publication_delay_hours: 4.0
+  max_input_age_hours: 240.0
+  max_input_age_is_experimental: true
+features:
+  raw_features:
+    - F1
+    - F2
+    - P3
+    - W4
+    - T5
+    - P8
+    - F9
+    - W10
+    - T11
+    - T12
+    - F14
+    - F15
+    - T16
+    - F17
+    - T18
+    - F19
+    - Q20
+    - Q21
+    - F22
+    - T23
+    - P24
+    - F25
+    - F26
+  lab_features:
+    - input_sulfur_mg_kg
+    - input_sulfur_age_hours
+  calculated_features:
+    - I250
+    - D15
+  forbidden_base_features:
+    - W7
+    - T6
+    - P13
+training:
+  mode: current
+  forecast_horizon_hours: 4.0
+  target_match_tolerance_minutes: 20.0
+  output_lims_match_tolerance_minutes: 60.0
+  train_fraction: 0.7
+  validation_fraction: 0.15
+  random_seed: 42
+  iterations: 200
+  learning_rate: 0.05
+  depth: 6
+inference:
+  sulfur_limit_mg_kg: 10.0
+  limit_applies_to_hdt_output: true
+  allow_scenario_assessment: false
+artifacts:
+  root_dir: artifacts/quality_agent

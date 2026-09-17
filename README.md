@@ -6,6 +6,9 @@
 - `pak_parser.py` — разбирает поточный анализатор качества (ПАК)
 - `quality_formulas.py` — считает показатели качества по тегам КИП
   (формулы ВАК)
+- `src/quality_agent/` — каркас агента качества для прогноза серы на
+  выходе гидроочистки 24-2000: подготовка признаков, CatBoost-регрессия,
+  проверка качества, инференс и адаптер к контракту оркестратора.
 
 Первые два просто приводят сырые Excel-файлы к удобному формату
 (одна строка = одно измерение). Третий - не про формат, а про расчет:
@@ -19,6 +22,21 @@ python3 -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
+
+## Агент качества 24-2000
+
+Подробный контракт данных, ограничения по ЛИМС, режимы `current`/`forecast`,
+артефакты и открытые вопросы описаны в `docs/quality_agent.md`.
+
+Быстрая проверка без производственных данных:
+
+```bash
+py scripts/train_quality.py --config configs/quality_agent.yaml --synthetic --run-id synthetic --save-prepared data/processed/quality_synthetic.parquet
+py scripts/predict_quality.py --model-dir artifacts/quality_agent/synthetic --input data/processed/quality_synthetic.parquet --output artifacts/quality_agent/synthetic/predictions.csv
+```
+
+Для реального обучения нужно указать пути к ПАК/ЛИМС или готовому
+подготовленному датасету в `configs/quality_agent.yaml`.
 
 ## Куда класть датасеты
 

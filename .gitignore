@@ -1,4 +1,10 @@
 venv/
 __pycache__/
 .idea/
-data/
+data/*
+!data/simulator/
+!data/simulator/demo_states.yaml
+artifacts/
+.pytest_cache/
+*.cbm
+streamlit-simulator*.log

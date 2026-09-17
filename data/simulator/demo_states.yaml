@@ -1,0 +1,25 @@
+states:
+  - id: normal_load
+    name: Нормальная загрузка
+    timestamp: "2026-09-17 08:00"
+    sulfur_in: 520
+    q21: 7.4
+    t6: 350
+    f9: 100
+    p13: 5.2
+  - id: high_load
+    name: Высокая загрузка
+    timestamp: "2026-09-17 09:00"
+    sulfur_in: 610
+    q21: 9.2
+    t6: 348
+    f9: 118
+    p13: 5.0
+  - id: quality_margin
+    name: Запас по качеству
+    timestamp: "2026-09-17 10:00"
+    sulfur_in: 460
+    q21: 5.8
+    t6: 355
+    f9: 94
+    p13: 5.5
