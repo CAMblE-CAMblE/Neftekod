@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 import subprocess
 
+from pandas import DataFrame
+
 UPLOADS = Path(__file__).resolve().parent / "data"
 CURRENT_DIR = Path(__file__).resolve().parent
 
@@ -44,11 +46,11 @@ def get_csv_tags(path_to_data: str) -> pd.DataFrame:
 
     return df
 
-def run_quality_formulas(current_path: Path) -> Any:
+def run_quality_formulas(current_path: Path, name_script: str) -> Any:
     '''
     Функция запуска расчета ВАК (запуск quality_formulas.py)
     '''
-    script = current_path / "quality_formulas.py"
+    script = current_path / name_script
 
     try:
         result = subprocess.run(
@@ -98,6 +100,37 @@ def get_pak_tags(path_to_data: str) -> pd.DataFrame:
 
     return df
 
+def run_quality(path_to_quality: Path, name_script: str) -> Optional[DataFrame]:
+
+    if path_to_quality.exists():
+            
+        print('\nНайден уже существующий файл с ВАК тегами.')
+
+        while True:
+            no = input("\nВыполнить перерасчет? (y/n) [n]:")
+
+            if no.strip().lower() in ("n", ""):
+                break
+
+            elif no.strip().lower() == 'y':
+
+                res = run_quality_formulas(CURRENT_DIR, name_script)
+
+                if res is None:
+                    print('\nОшибка расчета')
+                    return
+                else:
+                    print('\nРасчет ВАК закончен. Получение значений')
+                break
+
+            else:
+                print('\nНекорректный ввод')
+    else:
+        res = run_quality_formulas(CURRENT_DIR, name_script)
+        
+    return get_csv_tags(str(path_to_quality))
+
+
 def main():
     print('\nНачало получения данных')
 
@@ -116,39 +149,14 @@ def main():
             else:
                 print('\nНекорректный ввод')
 
-    print('\nПолучение тегов АВТ')
+    print('\nПолучение тегов АВТ + ВАК')
     
-    avt_tags = get_csv_tags(f"{UPLOADS}/avt_tags.csv")
+    avt_tags = run_quality(UPLOADS / "avt_tags_with_quality.csv", "avt6_formulas.py")
 
-    print('\nТеги АВТ успешно получены\n\nЗапущен расчет ВАК')
+    print('\nТеги АВТ + ВАК успешно получены\n\nЗапущен расчет Гидроочистка + ВАК')
 
-    output_file = UPLOADS / "tags_with_quality.csv"
-
-    if output_file.exists():
-            print('\nНайден уже существующий файл с ВАК тегами.')
+    quality_tags = run_quality(UPLOADS / "tags_with_quality.csv", "quality_formulas.py")
     
-            while True:
-                no = input("\nВыполнить перерасчет? (y/n) [n]:")
-    
-                if no.strip().lower() in ("n", ""):
-                    break
-
-                elif no.strip().lower() == 'y':
-
-                    res = run_quality_formulas(CURRENT_DIR)
-
-                    if res is None:
-                        print('\nОшибка расчета')
-                        return
-                    else:
-                        print('\nРасчет ВАК закончен. Получение значений')
-                    break
-
-                else:
-                    print('\nНекорректный ввод')
-       
-    quality_tags = get_csv_tags(f"{UPLOADS}/tags_with_quality.csv")
-
     print('\nЗначения ВАК успешно получены\n\nПолучение значений ПАК')
 
     pak_tags = get_pak_tags(f"{UPLOADS}/Выгрузка ПАК 01.01.2023 - н.в_.xlsx")
