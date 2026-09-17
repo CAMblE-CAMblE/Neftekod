@@ -189,3 +189,28 @@ t95_values = attach_pipeline_lims(tags_df, lims_df, parameter="95%.T")
 d15_values = attach_pipeline_lims(tags_df, lims_df, parameter="D15")
 quality = compute_all(tags, lims_95pct_t_pipeline=t95, lims_d15_pipeline=d15)
 ```
+## all_data.py
+
+Скрипт объдинения данных тегов АВТ, Гидроочистка, ПАК и ВАК. В процессе работы запускает `quality_formulas.py`, поэтому для корректной работы необходимо чтобы имелись файлы, от которых зависит `quality_formulas.py`
+
+Для работоспособности необходимо чтобы в директории data/ находились файлы
+
+- avt_tags.csv
+- Выгрузка ПАК 01.01.2023 - н.в_.xlsx
+- файлы для корректной работы quality_formulas.py
+
+Результат работы: файл `data/output.csv`
+
+### Запуск
+
+Windows:
+
+```PowerShell
+python all_data.py
+```
+
+Linux:
+
+```Bash
+python3 all_data.py
+```
