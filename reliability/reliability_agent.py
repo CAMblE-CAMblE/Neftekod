@@ -85,5 +85,96 @@ class ReliabilityAgent:
             "_contributions": sev.contributions
         }
 
+    # Оценка конкретного кандидата управляющих
+    _SIM_CONTROLS = ("T6", "F9", "P13")
+
+    def _corridor_base(self, timestamp) -> dict:
+        """Коридоры + режим на момент timestamp"""
+        key = str(timestamp)
+        cached = getattr(self, "_cand_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        base = self.assess(timestamp)
+        info = {
+            "regime_allowed": base["regime_allowed"],
+            "risk_index": base["risk_index"],
+            "risk_class": base["risk_class"],
+            "state": base.get("_state"),
+            "corridors": base.get("optimization_constraints", {}) or {}
+        }
+        self._cand_cache = (key, info)
+        return info
+
+    @staticmethod
+    def _normalize_controls(controls=None, **kw) -> dict:
+        """Принимает dict {'T6':..}, объект с .t6/.f9/.p13 (напр. ControlSettings
+        симулятора — без импорта его класса), или kwargs t6=/f9=/p13=."""
+        src: dict = {}
+        if controls is not None:
+            if isinstance(controls, dict):
+                src.update({str(k).upper(): v for k, v in controls.items()})
+            else:
+                for attr in ("t6", "f9", "p13", "f15", "f25"):
+                    if hasattr(controls, attr):
+                        src[attr.upper()] = getattr(controls, attr)
+        src.update({str(k).upper(): v for k, v in kw.items()})
+        return {k: float(v) for k, v in src.items() if v is not None}
+
+    def assess_candidate(self, timestamp, controls=None, **kw) -> dict:
+        """Допустим ли кандидат управляющих в момент timestamp.
+
+        Возвращает контракт симулятора {is_allowed, reasons} + доп. поля
+        (risk_index, risk_class, state, checked, corridors) — их конвертер может
+        игнорировать. Правило: во время останова/пуска/перехода кандидаты не
+        оцениваются; иначе проверяем каждый управляющий против его рабочего коридора"""
+        cand = self._normalize_controls(controls, **kw)
+        info = self._corridor_base(timestamp)
+
+        if not info["regime_allowed"]:
+            return {
+                "is_allowed": False,
+                "reasons": [f"режим не допускает рекомендаций (состояние: {info['state']}) — "
+                            "во время останова/пуска/перехода кандидаты не оцениваются"],
+                "risk_index": info["risk_index"], 
+                "risk_class": info["risk_class"],
+                "state": info["state"], 
+                "checked": {}, 
+                "corridors": info["corridors"]
+            }
+
+        corridors = info["corridors"]
+        reasons: list[str] = []
+        checked: dict[str, bool] = {}
+        # проверяем управляющие симулятора (если переданы иные, то тоже проверим при наличии коридора)
+        names = [n for n in self._SIM_CONTROLS if n in cand] or list(cand.keys())
+        for name in names:
+            v = cand[name]
+            if name in corridors:
+                lo, hi = corridors[name]
+                ok = lo <= v <= hi
+                checked[name] = ok
+                if not ok:
+                    reasons.append(f"{name}={v:.2f} вне рабочего коридора {lo:.2f}..{hi:.2f}")
+            else:
+                reasons.append(f"{name}: нет коридора (не проверено)")
+
+        is_allowed = all(checked.values()) and len(checked) > 0
+        if is_allowed and not any("вне рабочего коридора" in r for r in reasons):
+            reasons = ["все управляющие в допустимых рабочих коридорах"] + reasons
+        return {
+            "is_allowed": is_allowed, 
+            "reasons": reasons,
+            "risk_index": info["risk_index"], 
+            "risk_class": info["risk_class"],
+            "state": info["state"], 
+            "checked": checked, 
+            "corridors": corridors
+        }
+
+    def assess_candidates(self, timestamp, candidates) -> list[dict]:
+        """Пакетная оценка сетки кандидатов в одной точке"""
+        return [self.assess_candidate(timestamp, c) for c in candidates]
+
+
 def assess(timestamp, config_path: str | Path | None = None) -> dict:
     return ReliabilityAgent(config_path).assess(timestamp)
