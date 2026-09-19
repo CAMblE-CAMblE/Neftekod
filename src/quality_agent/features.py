@@ -15,11 +15,11 @@ def allowed_calculated_features(config: QualityAgentConfig) -> list[str]:
     """Возвращает разрешенные расчетные признаки.
 
     Вход: конфигурация с источниками ВАК. Выход: список признаков, не зависящих
-    от запрещенных сигналов. Существенное условие: зависимость от W7, T6 или
-    P13 исключает расчетный признак из обучения.
+    от запрещенных колонок. Существенное условие: целевые и сравнительные
+    колонки не могут попасть в матрицу признаков через ВАК.
     """
 
-    forbidden = set(config.features.forbidden_base_features)
+    forbidden = set(config.features.forbidden_base_features) | set(config.features.leakage_features)
     result = []
     for name in config.features.calculated_features:
         sources = set(config.features.calculated_feature_sources.get(name, []))
@@ -36,7 +36,7 @@ def ordered_feature_names(config: QualityAgentConfig) -> list[str]:
     ошибочно попали в YAML.
     """
 
-    forbidden = set(config.features.forbidden_base_features)
+    forbidden = set(config.features.forbidden_base_features) | set(config.features.leakage_features)
     names = [name for name in config.features.raw_features if name not in forbidden]
     names.extend(config.features.lab_features)
     names.extend(allowed_calculated_features(config))
@@ -78,19 +78,14 @@ def add_calculated_features(frame: pd.DataFrame, config: QualityAgentConfig) -> 
     if not needed:
         return out
     required = set(AvtGodtTags.__dataclass_fields__)
-    if not required.issubset(out.columns):
-        missing = sorted(required - set(out.columns))
-        for name in needed:
-            out[name] = pd.NA
-        out.attrs["calculated_feature_origin"] = config.features.calculated_feature_sources
-        out.attrs["calculated_feature_warning"] = f"Не хватает колонок для ВАК: {missing}"
-        return out
     values: dict[str, list[float]] = {name: [] for name in needed}
     for _, row in out.iterrows():
-        tags = AvtGodtTags(**{field: _safe_float(row[field]) for field in required})
+        tags = AvtGodtTags(**{field: _safe_float(row.get(field)) for field in required})
+        t95_pipeline = _safe_float(row.get("pipeline_95pct_t"))
         d15_pipeline = _safe_float(row.get("pipeline_d15"))
         all_values = compute_all(
             tags,
+            lims_95pct_t_pipeline=t95_pipeline if not math.isnan(t95_pipeline) else None,
             lims_d15_pipeline=d15_pipeline if not math.isnan(d15_pipeline) else None,
         )
         for name in needed:
@@ -119,7 +114,17 @@ def prepare_features(
     enriched = add_calculated_features(frame, config)
     names = feature_names or ordered_feature_names(config)
     forbidden = set(config.features.forbidden_base_features)
-    leakage = [name for name in names if name in forbidden or name.startswith("target_")]
+    leakage_set = set(config.features.leakage_features) | {config.data.target_col, config.data.target_source_col}
+    leakage = [
+        name
+        for name in names
+        if name in forbidden
+        or name in leakage_set
+        or name.startswith("target_")
+        or name.endswith("_target")
+        or name.endswith("_rejected")
+        or name.endswith("_rejection_reason")
+    ]
     if leakage:
         raise ValueError(f"Запрещенные или целевые признаки попали в матрицу: {leakage}")
     missing = [name for name in names if name not in enriched.columns]

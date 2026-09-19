@@ -42,8 +42,16 @@ def main() -> None:
             write_table(frame, args.save_prepared)
         run_dir = train_model(frame, output_lims, config, run_id=args.run_id or "synthetic")
     else:
-        if not config.data.pak_path and not config.data.prepared_path:
-            raise SystemExit("Для реального обучения задайте data.pak_path или data.prepared_path; сейчас команда собирает датасет.")
+        if not config.data.prepared_path and not (config.data.telemetry_path and config.data.lims_path):
+            raise SystemExit("Для реального обучения задайте data.prepared_path или data.telemetry_path + data.lims_path.")
+        if args.save_prepared and not config.data.prepared_path:
+            from quality_agent.data import load_sources
+
+            telemetry, pak, lims = load_sources(config)
+            frame = build_base_frame(telemetry, pak, lims, config)
+            write_table(frame, args.save_prepared)
+            if config.data.output_lims_path:
+                write_table(extract_output_lims(lims, config), config.data.output_lims_path)
         run_dir = train_from_sources(config, run_id=args.run_id)
     logging.info("Артефакты сохранены: %s", run_dir)
 

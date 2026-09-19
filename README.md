@@ -9,6 +9,8 @@
 - `src/quality_agent/` — каркас агента качества для прогноза серы на
   выходе гидроочистки 24-2000: подготовка признаков, CatBoost-регрессия,
   проверка качества, инференс и адаптер к контракту оркестратора.
+- `scripts/build_quality_dataset.py` — собирает реальный датасет агента
+  качества из `242000_tags.csv` и ЛИМС без запуска обучения.
 
 Первые два просто приводят сырые Excel-файлы к удобному формату
 (одна строка = одно измерение). Третий - не про формат, а про расчет:
@@ -28,6 +30,16 @@ pip install -r requirements.txt
 Подробный контракт данных, ограничения по ЛИМС, режимы `current`/`forecast`,
 артефакты и открытые вопросы описаны в `docs/quality_agent.md`.
 
+Сборка реального датасета перед обучением:
+
+```bash
+py scripts/build_quality_dataset.py --config configs/quality_agent.yaml
+```
+
+Результаты сохраняются в `data/processed/quality_dataset.parquet`,
+`data/processed/quality_output_lims.parquet` и
+`data/processed/quality_dataset_report.json`.
+
 Быстрая проверка без производственных данных:
 
 ```bash
@@ -35,8 +47,8 @@ py scripts/train_quality.py --config configs/quality_agent.yaml --synthetic --ru
 py scripts/predict_quality.py --model-dir artifacts/quality_agent/synthetic --input data/processed/quality_synthetic.parquet --output artifacts/quality_agent/synthetic/predictions.csv
 ```
 
-Для реального обучения нужно указать пути к ПАК/ЛИМС или готовому
-подготовленному датасету в `configs/quality_agent.yaml`.
+Для первого реального обучения используется Q21 из телеметрии 24-2000.
+ПАК не обязателен и остается сравнительным источником.
 
 ## Куда класть датасеты
 
@@ -207,3 +219,20 @@ t95_values = attach_pipeline_lims(tags_df, lims_df, parameter="95%.T")
 d15_values = attach_pipeline_lims(tags_df, lims_df, parameter="D15")
 quality = compute_all(tags, lims_95pct_t_pipeline=t95, lims_d15_pipeline=d15)
 ```
+
+---
+
+## all_data.py
+
+Общий сборщик команды для объединения АВТ, гидроочистки/ВАК и ПАК в
+`data/output.csv`.
+
+При объединении одноименные колонки разных источников не удаляются. Вместо
+этого добавляются явные префиксы:
+
+- `avt__` — теги АВТ;
+- `hdt__` — теги 24-2000 и рассчитанные ВАК;
+- `pak__` — ПАК.
+
+Если `data/tags_with_quality.csv` отсутствует, скрипт запускает
+`quality_formulas.py` и создает промежуточный файл перед объединением.

@@ -1,10 +1,14 @@
 data:
   telemetry_path: data/242000_tags.csv
   pak_path: null
-  lims_path: null
-  prepared_path: null
+  lims_path: "data/ЛИМСы 01.01.2023 - н.в_ (2).xlsx"
+  prepared_path: data/processed/quality_dataset.parquet
+  output_lims_path: data/processed/quality_output_lims.parquet
   timestamp_col: date
+  timestamp_format: "%Y-%m-%d %H:%M:%S"
   pak_target_tag: "24-2000:Mg.Sulfur"
+  target_col: target_sulfur_mg_kg
+  target_source_col: target_source
   input_lims_sampling_point: "Гидроочистка:1"
   input_lims_parameter: "Mass.Sulfur"
   output_lims_sampling_point: "Гидроочистка:2"
@@ -20,19 +24,20 @@ features:
     - P3
     - W4
     - T5
+    - T6
+    - W7
     - P8
     - F9
     - W10
     - T11
     - T12
+    - P13
     - F14
     - F15
     - T16
     - F17
     - T18
     - F19
-    - Q20
-    - Q21
     - F22
     - T23
     - P24
@@ -42,15 +47,31 @@ features:
     - input_sulfur_mg_kg
     - input_sulfur_age_hours
   calculated_features:
+    - T90
+    - T50
     - I250
+    - IBP
+    - CloudPoint
+    - CFPP
+    - T95
     - D15
   forbidden_base_features:
-    - W7
-    - T6
-    - P13
+    - Q20
+    - Q21
+  leakage_features:
+    - target_sulfur_mg_kg
+    - target_sulfur_raw_mg_kg
+    - target_sulfur_rejected
+    - target_sulfur_rejection_reason
+    - target_pak_sulfur_mg_kg
+    - pak_sulfur_mg_kg
+    - output_lims_sulfur_mg_kg
+    - Mg.Sulfur
+    - "24-2000:Mg.Sulfur"
 training:
   mode: current
-  forecast_horizon_hours: 4.0
+  forecast_horizon_hours: 3.0
+  max_forecast_horizon_hours: 3.0
   target_match_tolerance_minutes: 20.0
   output_lims_match_tolerance_minutes: 60.0
   train_fraction: 0.7

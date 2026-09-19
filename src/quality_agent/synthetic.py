@@ -47,10 +47,11 @@ def make_synthetic_sources(n: int = 96) -> tuple[pd.DataFrame, pd.DataFrame, pd.
     ]
     for idx, name in enumerate(columns):
         telemetry[name] = 10 + idx + pd.Series(range(n)).map(lambda x: math.sin(x / 8 + idx) * 0.5)
-    telemetry["P8"] = 340 + pd.Series(range(n)).map(lambda x: math.sin(x / 12) * 4)
-    telemetry["T11"] = 120 + pd.Series(range(n)).map(lambda x: math.cos(x / 10) * 3)
-    telemetry["F19"] = 4.0 + pd.Series(range(n)).map(lambda x: math.sin(x / 9) * 0.2)
-    sulfur = 6.0 + (telemetry["T11"] - 120) * 0.05 - (telemetry["P8"] - 340) * 0.02 + pd.Series(range(n)) * 0.005
+    telemetry["T6"] = 350 + pd.Series(range(n)).map(lambda x: math.sin(x / 12) * 4)
+    telemetry["F9"] = 105 + pd.Series(range(n)).map(lambda x: math.cos(x / 10) * 3)
+    telemetry["P13"] = 5.0 + pd.Series(range(n)).map(lambda x: math.sin(x / 9) * 0.2)
+    sulfur = 6.0 - (telemetry["T6"] - 350) * 0.04 + (telemetry["F9"] - 105) * 0.03 - (telemetry["P13"] - 5.0) * 0.2 + pd.Series(range(n)) * 0.005
+    telemetry["Q21"] = sulfur
     pak = pd.DataFrame(
         {
             "timestamp": times,
@@ -70,6 +71,26 @@ def make_synthetic_sources(n: int = 96) -> tuple[pd.DataFrame, pd.DataFrame, pd.
             "value": [0.055 + i * 0.001 for i in range(len(lab_times))],
         }
     )
+    lims_d15 = pd.DataFrame(
+        {
+            "timestamp": lab_times,
+            "sampling_point": "Гидроочистка:1",
+            "product": "ФРАКЦ_ДИЗ",
+            "parameter": "D15",
+            "unit": "кг/м3",
+            "value": [835 + i * 0.2 for i in range(len(lab_times))],
+        }
+    )
+    lims_t95 = pd.DataFrame(
+        {
+            "timestamp": lab_times,
+            "sampling_point": "Гидроочистка:1",
+            "product": "ФРАКЦ_ДИЗ",
+            "parameter": "95%.T",
+            "unit": "°С",
+            "value": [345 + i * 0.3 for i in range(len(lab_times))],
+        }
+    )
     lims_out = pd.DataFrame(
         {
             "timestamp": lab_times + pd.Timedelta(minutes=20),
@@ -80,4 +101,4 @@ def make_synthetic_sources(n: int = 96) -> tuple[pd.DataFrame, pd.DataFrame, pd.
             "value": [6.1 + i * 0.03 for i in range(len(lab_times))],
         }
     )
-    return telemetry, pak, pd.concat([lims_in, lims_out], ignore_index=True)
+    return telemetry, pak, pd.concat([lims_in, lims_d15, lims_t95, lims_out], ignore_index=True)

@@ -1,0 +1,100 @@
+{
+  "run_id": "first_quality_current",
+  "seed": 42,
+  "periods": {
+    "train": {
+      "state_time_min": "2023-01-01 00:00:00",
+      "state_time_max": "2025-07-08 19:00:00",
+      "n": 127994
+    },
+    "validation": {
+      "state_time_min": "2025-07-08 19:10:00",
+      "state_time_max": "2026-01-21 21:30:00",
+      "n": 28195
+    },
+    "test": {
+      "state_time_min": "2026-01-21 21:40:00",
+      "state_time_max": "2026-08-07 00:00:00",
+      "n": 27410
+    }
+  },
+  "dependency_versions": {
+    "python": "3.14.0",
+    "pandas": "3.0.5",
+    "catboost": "1.2.10"
+  },
+  "git_revision": "50f493725fae561739c3e85a135375b516464564",
+  "dataset_checksum": "74c69e93ef919a5f23182ad5c3651030889fe63ef4dd65bd1edc3097b8915ed1",
+  "feature_units": {
+    "input_sulfur_mg_kg": "мг/кг",
+    "input_sulfur_age_hours": "ч",
+    "I250": "% об.",
+    "T95": "°С",
+    "D15": "кг/м3"
+  },
+  "feature_preparation": {
+    "lims_delay_hours": 4.0,
+    "max_input_age_hours": 240.0,
+    "max_input_age_is_experimental": true,
+    "calculated_feature_sources": {
+      "T90": [
+        "F1",
+        "F15",
+        "F26",
+        "T12",
+        "T23",
+        "W7"
+      ],
+      "T50": [
+        "F9",
+        "P13",
+        "T6"
+      ],
+      "I250": [
+        "F14",
+        "F25",
+        "T5",
+        "T11",
+        "T16",
+        "T23"
+      ],
+      "IBP": [
+        "F14",
+        "F22",
+        "F26",
+        "P13",
+        "P24",
+        "T16",
+        "T23",
+        "W4"
+      ],
+      "CloudPoint": [
+        "F1",
+        "F9",
+        "F22",
+        "F25",
+        "T6",
+        "T16",
+        "W7"
+      ],
+      "CFPP": [
+        "F9",
+        "P8",
+        "P24",
+        "T23",
+        "W7"
+      ],
+      "T95": [
+        "F2",
+        "F9",
+        "T6",
+        "LIMS:Гидроочистка:1:95%.T"
+      ],
+      "D15": [
+        "F22",
+        "T11",
+        "LIMS:Гидроочистка:1:D15"
+      ]
+    }
+  }
+}

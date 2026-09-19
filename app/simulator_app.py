@@ -32,9 +32,9 @@ STATES_PATH = ROOT / "data" / "simulator" / "demo_states.yaml"
 def main() -> None:
     """Запускает одностраничный интерфейс симулятора."""
 
-    st.set_page_config(page_title="Симулятор поддержки оператора", layout="wide")
-    st.title("Симулятор поддержки оператора гидроочистки")
-    st.caption("Демонстрационные данные и демонстрационная сценарная модель")
+    st.set_page_config(page_title="Система расчета регулирования работы ABT", layout="wide")
+    st.title("Система расчета регулирования работы ABT")
+    st.caption("Данные, модель")
 
     base_config = load_simulator_config(CONFIG_PATH)
     states = load_demo_states(STATES_PATH)
@@ -169,9 +169,9 @@ def _render_state_summary(state: HistoricalState) -> None:
         cols = st.columns(5)
         cols[0].metric("Время", state.timestamp)
         cols[1].metric("Входящая сера", f"{state.sulfur_in:.0f} мг/кг")
-        cols[2].metric("T6", f"{state.controls.t6:.1f}")
-        cols[3].metric("F9", f"{state.controls.f9:.1f}")
-        cols[4].metric("P13", f"{state.controls.p13:.2f}")
+        cols[2].metric("T6, температура ГСС на входе", f"{state.controls.t6:.1f}")
+        cols[3].metric("F9, расход сырья на установку, массовый", f"{state.controls.f9:.1f}")
+        cols[4].metric("P13, давление на входе", f"{state.controls.p13:.2f}")
 
 
 def _render_metrics(state: HistoricalState, sulfur_limit: float) -> None:

@@ -50,21 +50,23 @@ def chronological_split(frame: pd.DataFrame, config: QualityAgentConfig) -> dict
     за пределами своего периода исключаются на границах.
     """
 
-    data = frame.dropna(subset=["target_pak_sulfur_mg_kg"]).sort_values("state_time").reset_index(drop=True)
-    if data.empty:
-        raise ValueError("Нет строк с целевой переменной target_pak_sulfur_mg_kg")
+    target_col = config.data.target_col
+    data = frame.sort_values("state_time").reset_index(drop=True)
+    if data[target_col].notna().sum() == 0:
+        raise ValueError(f"Нет строк с целевой переменной {target_col}")
     n = len(data)
     train_end = max(1, int(n * config.training.train_fraction))
     val_end = max(train_end + 1, int(n * (config.training.train_fraction + config.training.validation_fraction)))
     val_end = min(val_end, n)
-    train = data.iloc[:train_end].copy()
-    validation = data.iloc[train_end:val_end].copy()
-    test = data.iloc[val_end:].copy()
+    train = data.iloc[:train_end].dropna(subset=[target_col]).copy()
+    validation = data.iloc[train_end:val_end].dropna(subset=[target_col]).copy()
+    test = data.iloc[val_end:].dropna(subset=[target_col]).copy()
     if config.training.mode == "forecast":
         train_limit = train["state_time"].max()
         val_limit = validation["state_time"].max() if not validation.empty else train_limit
-        train = train[train["prediction_time"] <= train_limit]
-        validation = validation[validation["prediction_time"] <= val_limit]
+        target_time_col = "target_time" if "target_time" in train.columns else "prediction_time"
+        train = train[train[target_time_col] <= train_limit]
+        validation = validation[validation[target_time_col] <= val_limit]
     return {"train": train, "validation": validation, "test": test}
 
 
@@ -128,7 +130,8 @@ def train_model(
     run_dir.mkdir(parents=True, exist_ok=True)
     splits = chronological_split(frame, config)
     X_train, feature_names, train_diag = prepare_features(splits["train"], config)
-    y_train = splits["train"]["target_pak_sulfur_mg_kg"]
+    target_col = config.data.target_col
+    y_train = splits["train"][target_col]
     model = CatBoostRegressor(
         loss_function="RMSE",
         iterations=config.training.iterations,
@@ -141,7 +144,7 @@ def train_model(
     eval_set = None
     if not splits["validation"].empty:
         X_val, _, _ = prepare_features(splits["validation"], config, feature_names=feature_names)
-        eval_set = (X_val, splits["validation"]["target_pak_sulfur_mg_kg"])
+        eval_set = (X_val, splits["validation"][target_col])
     model.fit(X_train, y_train, eval_set=eval_set)
     baseline = MedianBaseline(float(y_train.median()))
 
@@ -155,10 +158,15 @@ def train_model(
         X, _, _ = prepare_features(split, config, feature_names=feature_names)
         pred = pd.Series(model.predict(X), index=split.index)
         base_pred = pd.Series(baseline.predict(X), index=split.index)
-        y = split["target_pak_sulfur_mg_kg"]
+        y = split[target_col]
         metrics["catboost"][name] = regression_metrics(y, pred)
         metrics["baseline"][name] = regression_metrics(y, base_pred)
-        block = split[["state_time", "prediction_time", "target_pak_sulfur_mg_kg"]].copy()
+        keep_cols = ["state_time", "prediction_time", target_col]
+        if "target_time" in split.columns:
+            keep_cols.append("target_time")
+        if config.data.target_source_col in split.columns:
+            keep_cols.append(config.data.target_source_col)
+        block = split[keep_cols].copy()
         block["split"] = name
         block["prediction_mg_kg"] = pred.values
         block["baseline_prediction_mg_kg"] = base_pred
@@ -246,7 +254,10 @@ def train_from_sources(config: QualityAgentConfig, *, run_id: str | None = None)
 
     if config.data.prepared_path:
         frame = read_table(config.data.prepared_path)
-        output_lims = pd.DataFrame()
+        if config.data.output_lims_path and Path(config.data.output_lims_path).exists():
+            output_lims = read_table(config.data.output_lims_path)
+        else:
+            output_lims = pd.DataFrame()
     else:
         telemetry, pak, lims = load_sources(config)
         frame = build_base_frame(telemetry, pak, lims, config)
@@ -256,5 +267,11 @@ def train_from_sources(config: QualityAgentConfig, *, run_id: str | None = None)
         output_lims,
         config,
         run_id=run_id,
-        input_paths=[config.data.telemetry_path, config.data.pak_path, config.data.lims_path, config.data.prepared_path],
+        input_paths=[
+            config.data.telemetry_path,
+            config.data.pak_path,
+            config.data.lims_path,
+            config.data.prepared_path,
+            config.data.output_lims_path,
+        ],
     )

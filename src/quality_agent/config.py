@@ -23,8 +23,12 @@ class DataConfig:
     pak_path: str | None = None
     lims_path: str | None = None
     prepared_path: str | None = None
+    output_lims_path: str | None = "data/processed/quality_output_lims.parquet"
     timestamp_col: str = "date"
+    timestamp_format: str | None = "%Y-%m-%d %H:%M:%S"
     pak_target_tag: str = "24-2000:Mg.Sulfur"
+    target_col: str = "target_sulfur_mg_kg"
+    target_source_col: str = "target_source"
     input_lims_sampling_point: str = "Гидроочистка:1"
     input_lims_parameter: str = "Mass.Sulfur"
     output_lims_sampling_point: str = "Гидроочистка:2"
@@ -52,7 +56,7 @@ class FeatureConfig:
 
     Вход: явный список признаков и происхождение расчетных показателей. Выход:
     проверенный порядок колонок для обучения и инференса. Существенное условие:
-    W7, T6, P13 и расчетные ВАК, зависящие от них, исключаются до обучения.
+    целевые и сравнительные колонки исключаются даже при ошибке в YAML.
     """
 
     raw_features: list[str] = field(
@@ -62,19 +66,20 @@ class FeatureConfig:
             "P3",
             "W4",
             "T5",
+            "T6",
+            "W7",
             "P8",
             "F9",
             "W10",
             "T11",
             "T12",
+            "P13",
             "F14",
             "F15",
             "T16",
             "F17",
             "T18",
             "F19",
-            "Q20",
-            "Q21",
             "F22",
             "T23",
             "P24",
@@ -85,8 +90,23 @@ class FeatureConfig:
     lab_features: list[str] = field(
         default_factory=lambda: ["input_sulfur_mg_kg", "input_sulfur_age_hours"]
     )
-    calculated_features: list[str] = field(default_factory=lambda: ["I250", "D15"])
-    forbidden_base_features: list[str] = field(default_factory=lambda: ["W7", "T6", "P13"])
+    calculated_features: list[str] = field(
+        default_factory=lambda: ["T90", "T50", "I250", "IBP", "CloudPoint", "CFPP", "T95", "D15"]
+    )
+    forbidden_base_features: list[str] = field(default_factory=lambda: ["Q20", "Q21"])
+    leakage_features: list[str] = field(
+        default_factory=lambda: [
+            "target_sulfur_mg_kg",
+            "target_sulfur_raw_mg_kg",
+            "target_sulfur_rejected",
+            "target_sulfur_rejection_reason",
+            "target_pak_sulfur_mg_kg",
+            "pak_sulfur_mg_kg",
+            "output_lims_sulfur_mg_kg",
+            "Mg.Sulfur",
+            "24-2000:Mg.Sulfur",
+        ]
+    )
     calculated_feature_sources: dict[str, list[str]] = field(
         default_factory=lambda: {
             "T90": ["F1", "F15", "F26", "T12", "T23", "W7"],
@@ -104,6 +124,7 @@ class FeatureConfig:
             "input_sulfur_mg_kg": "мг/кг",
             "input_sulfur_age_hours": "ч",
             "I250": "% об.",
+            "T95": "°С",
             "D15": "кг/м3",
         }
     )
@@ -119,7 +140,8 @@ class TrainingConfig:
     """
 
     mode: str = "current"
-    forecast_horizon_hours: float = 4.0
+    forecast_horizon_hours: float = 3.0
+    max_forecast_horizon_hours: float = 3.0
     target_match_tolerance_minutes: float = 20.0
     output_lims_match_tolerance_minutes: float = 60.0
     train_fraction: float = 0.7

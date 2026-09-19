@@ -8,9 +8,28 @@ from pathlib import Path
 import pandas as pd
 
 from .config import QualityAgentConfig
-from .data import build_base_frame
+from .data import build_base_frame, forecast_horizon
 from .features import prepare_features
 from .model import load_model_bundle
+
+
+CONTROL_PARAMETER_INFO = {
+    "T6": {
+        "name": "температура на входе реактора",
+        "unit": "°C",
+        "note": "управляющий параметр сценарной диагностики",
+    },
+    "F9": {
+        "name": "массовый расход сырья",
+        "unit": "т/ч",
+        "note": "управляющий параметр сценарной диагностики; единицу нужно подтвердить по промышленному справочнику тегов",
+    },
+    "P13": {
+        "name": "давление на входе реактора",
+        "unit": "МПа",
+        "note": "управляющий параметр сценарной диагностики",
+    },
+}
 
 
 @dataclass
@@ -47,6 +66,12 @@ def predict_frame(frame: pd.DataFrame, bundle: QualityModelBundle) -> pd.DataFra
     Существенное условие: сравнение с пределом выполняется после регрессии.
     """
 
+    frame = frame.copy()
+    if "prediction_time" not in frame.columns:
+        if bundle.config.training.mode == "forecast":
+            frame["prediction_time"] = pd.to_datetime(frame["state_time"]) + forecast_horizon(bundle.config)
+        else:
+            frame["prediction_time"] = pd.to_datetime(frame["state_time"])
     X, _, diagnostics = prepare_features(frame, bundle.config, feature_names=bundle.feature_names)
     prediction = bundle.model.predict(X)
     out = pd.DataFrame(
@@ -85,6 +110,60 @@ def predict_frame(frame: pd.DataFrame, bundle: QualityModelBundle) -> pd.DataFra
     return out
 
 
+def predict_diagnostic_grid(
+    bundle: QualityModelBundle,
+    base_state: pd.Series | dict[str, object],
+    *,
+    scenario_input_sulfur_mg_kg: float,
+    t6_values: list[float],
+    f9_values: list[float],
+    p13_values: list[float],
+) -> pd.DataFrame:
+    """Строит исследовательскую сетку T6/F9/P13 и прогнозирует серу.
+
+    Вход: один исходный снимок установки, сценарное значение входящей серы и
+    списки значений T6, F9, P13. Выход: таблица кандидатов с прогнозом и
+    диагностическим статусом. Существенное условие: функция не меняет запрет
+    `allow_scenario_assessment`; результат является диагностикой реакции
+    регрессии, а не производственной рекомендацией.
+    """
+
+    base = dict(base_state)
+    if "state_time" not in base:
+        raise ValueError("В исходном состоянии должна быть колонка state_time")
+    candidates: list[dict[str, object]] = []
+    candidate_id = 0
+    for t6 in t6_values:
+        for f9 in f9_values:
+            for p13 in p13_values:
+                candidate = dict(base)
+                candidate["T6"] = float(t6)
+                candidate["F9"] = float(f9)
+                candidate["P13"] = float(p13)
+                candidate["input_sulfur_mg_kg"] = float(scenario_input_sulfur_mg_kg)
+                candidate["candidate_id"] = candidate_id
+                candidates.append(candidate)
+                candidate_id += 1
+    frame = pd.DataFrame(candidates)
+    prediction = predict_frame(frame, bundle)
+    result = pd.DataFrame(
+        {
+            "candidate_id": frame["candidate_id"],
+            "source_state_time": pd.to_datetime(frame["state_time"]),
+            "input_sulfur_mg_kg": frame["input_sulfur_mg_kg"],
+            "T6": frame["T6"],
+            "F9": frame["F9"],
+            "P13": frame["P13"],
+            "predicted_sulfur_mg_kg": prediction["predicted_sulfur_mg_kg"],
+        }
+    )
+    reasons = prediction["missing_or_stale_inputs"].map(lambda items: "; ".join(items) if items else "")
+    result["status"] = reasons.map(lambda value: "ok" if value == "" else "calculated_with_warnings")
+    result["status_reason"] = reasons
+    result["assessment_scope"] = "diagnostic_regression_response_not_recommendation"
+    return result
+
+
 def predict_from_sources(
     telemetry_df: pd.DataFrame,
     bundle: QualityModelBundle,
@@ -112,18 +191,26 @@ def assess_scenario(
 ) -> dict[str, object]:
     """Проверяет интерфейс сценарной оценки режима.
 
-    Вход: исходное состояние, сценарная входящая сера, изменения P8/T11/F19 и
+    Вход: исходное состояние, сценарная входящая сера, изменения T6/F9/P13 и
     горизонт. Выход: статус и, если разрешено, прогноз. Существенное условие:
     использование модели для действий должно быть включено явно после проверки
     пригодности на истории.
     """
 
-    allowed_controls = {"P8", "T11", "F19"}
+    allowed_controls = {"T6", "F9", "P13"}
     unknown = sorted(set(control_changes) - allowed_controls)
     if unknown:
         return {"status": "invalid_arguments", "message": f"Недопустимые управляющие параметры: {unknown}"}
-    if horizon_hours < 0:
-        return {"status": "invalid_arguments", "message": "Горизонт не может быть отрицательным"}
+    if horizon_hours < 0 or horizon_hours > bundle.config.training.max_forecast_horizon_hours:
+        return {
+            "status": "invalid_arguments",
+            "message": f"Горизонт должен быть в диапазоне 0..{bundle.config.training.max_forecast_horizon_hours} ч.",
+        }
+    if bundle.config.training.mode == "forecast" and horizon_hours != bundle.config.training.forecast_horizon_hours:
+        return {
+            "status": "invalid_arguments",
+            "message": "Горизонт сценария должен совпадать с горизонтом обученной forecast-модели.",
+        }
     if not bundle.config.inference.allow_scenario_assessment:
         return {
             "status": "scenario_model_not_validated",
