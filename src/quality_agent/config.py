@@ -20,6 +20,7 @@ class DataConfig:
     """
 
     telemetry_path: str = "data/242000_tags.csv"
+    avt_telemetry_path: str | None = None
     pak_path: str | None = None
     lims_path: str | None = None
     prepared_path: str | None = None
@@ -33,6 +34,7 @@ class DataConfig:
     input_lims_parameter: str = "Mass.Sulfur"
     output_lims_sampling_point: str = "Гидроочистка:2"
     output_lims_parameter: str = "Mg.Sulfur"
+    avt_asof_tolerance_minutes: float = 10.0
 
 
 @dataclass
@@ -61,39 +63,128 @@ class FeatureConfig:
 
     raw_features: list[str] = field(
         default_factory=lambda: [
-            "F1",
-            "F2",
-            "P3",
-            "W4",
-            "T5",
-            "T6",
-            "W7",
-            "P8",
-            "F9",
-            "W10",
-            "T11",
-            "T12",
-            "P13",
-            "F14",
-            "F15",
-            "T16",
-            "F17",
-            "T18",
-            "F19",
-            "F22",
-            "T23",
-            "P24",
-            "F25",
-            "F26",
+            "hdt_F1",
+            "hdt_F2",
+            "hdt_P3",
+            "hdt_W4",
+            "hdt_T5",
+            "hdt_T6",
+            "hdt_W7",
+            "hdt_P8",
+            "hdt_F9",
+            "hdt_W10",
+            "hdt_T11",
+            "hdt_T12",
+            "hdt_P13",
+            "hdt_F14",
+            "hdt_F15",
+            "hdt_T16",
+            "hdt_F17",
+            "hdt_T18",
+            "hdt_F19",
+            "hdt_F22",
+            "hdt_T23",
+            "hdt_P24",
+            "hdt_F25",
+            "hdt_F26",
+            "avt_T1",
+            "avt_P2",
+            "avt_F3",
+            "avt_P4",
+            "avt_F5",
+            "avt_T6",
+            "avt_F7",
+            "avt_F8",
+            "avt_F9",
+            "avt_D10",
+            "avt_T11",
+            "avt_F12",
+            "avt_T13",
+            "avt_F14",
+            "avt_T15",
+            "avt_F16",
+            "avt_T17",
+            "avt_T18",
+            "avt_F19",
+            "avt_T20",
+            "avt_P21",
+            "avt_P22",
+            "avt_P23",
+            "avt_T24",
+            "avt_F25",
+            "avt_F26",
+            "avt_F27",
+            "avt_F28",
+            "avt_F29",
+            "avt_F30",
+            "avt_F31",
+            "avt_F32",
+            "avt_T33",
+            "avt_F34",
+            "avt_F35",
+            "avt_F36",
+            "avt_T37",
+            "avt_T38",
+            "avt_T39",
+            "avt_T40",
+            "avt_F41",
+            "avt_T42",
+            "avt_L43",
+            "avt_P44",
+            "avt_F45",
+            "avt_F46",
+            "avt_T47",
+            "avt_T48",
+            "avt_T49",
+            "avt_P50",
+            "avt_P51",
+            "avt_P52",
+            "avt_F53",
+            "avt_F54",
+            "avt_T55",
+            "avt_F56",
+            "avt_F57",
+            "avt_T58",
+            "avt_F59",
+            "avt_F60",
+            "avt_T61",
+            "avt_F62",
+            "avt_F63",
+            "avt_F64",
+            "avt_F65",
+            "avt_T66",
+            "avt_P67",
+            "avt_F68",
+            "avt_F69",
+            "avt_W70",
+            "avt_T71",
         ]
     )
     lab_features: list[str] = field(
         default_factory=lambda: ["input_sulfur_mg_kg", "input_sulfur_age_hours"]
     )
     calculated_features: list[str] = field(
-        default_factory=lambda: ["T90", "T50", "I250", "IBP", "CloudPoint", "CFPP", "T95", "D15"]
+        default_factory=lambda: [
+            "hdt_T90",
+            "hdt_T50",
+            "hdt_I250",
+            "hdt_IBP",
+            "hdt_CloudPoint",
+            "hdt_CFPP",
+            "hdt_T95",
+            "hdt_D15",
+            "AVT6:240-350:D15",
+            "AVT6:240-350:T50",
+            "AVT6:240-350:EBP",
+            "AVT6:240-350:CFPP",
+            "AVT6:350:T50",
+            "AVT6:350:I350",
+            "AVT6:350:D15",
+            "AVT6:350:CFPP",
+            "AVT6:350-500:ViscosityK",
+        ]
     )
-    forbidden_base_features: list[str] = field(default_factory=lambda: ["Q20", "Q21"])
+    forbidden_base_features: list[str] = field(default_factory=lambda: ["hdt_Q20", "hdt_Q21"])
     leakage_features: list[str] = field(
         default_factory=lambda: [
             "target_sulfur_mg_kg",
@@ -103,20 +194,31 @@ class FeatureConfig:
             "target_pak_sulfur_mg_kg",
             "pak_sulfur_mg_kg",
             "output_lims_sulfur_mg_kg",
+            "hdt_Q20",
+            "hdt_Q21",
             "Mg.Sulfur",
             "24-2000:Mg.Sulfur",
         ]
     )
     calculated_feature_sources: dict[str, list[str]] = field(
         default_factory=lambda: {
-            "T90": ["F1", "F15", "F26", "T12", "T23", "W7"],
-            "T50": ["F9", "P13", "T6"],
-            "I250": ["F14", "F25", "T5", "T11", "T16", "T23"],
-            "IBP": ["F14", "F22", "F26", "P13", "P24", "T16", "T23", "W4"],
-            "CloudPoint": ["F1", "F9", "F22", "F25", "T6", "T16", "W7"],
-            "CFPP": ["F9", "P8", "P24", "T23", "W7"],
-            "T95": ["F2", "F9", "T6", "LIMS:Гидроочистка:1:95%.T"],
-            "D15": ["F22", "T11", "LIMS:Гидроочистка:1:D15"],
+            "hdt_T90": ["hdt_F1", "hdt_F15", "hdt_F26", "hdt_T12", "hdt_T23", "hdt_W7"],
+            "hdt_T50": ["hdt_F9", "hdt_P13", "hdt_T6"],
+            "hdt_I250": ["hdt_F14", "hdt_F25", "hdt_T5", "hdt_T11", "hdt_T16", "hdt_T23"],
+            "hdt_IBP": ["hdt_F14", "hdt_F22", "hdt_F26", "hdt_P13", "hdt_P24", "hdt_T16", "hdt_T23", "hdt_W4"],
+            "hdt_CloudPoint": ["hdt_F1", "hdt_F9", "hdt_F22", "hdt_F25", "hdt_T6", "hdt_T16", "hdt_W7"],
+            "hdt_CFPP": ["hdt_F9", "hdt_P8", "hdt_P24", "hdt_T23", "hdt_W7"],
+            "hdt_T95": ["hdt_F2", "hdt_F9", "hdt_T6", "LIMS:Гидроочистка:1:95%.T"],
+            "hdt_D15": ["hdt_F22", "hdt_T11", "LIMS:Гидроочистка:1:D15"],
+            "AVT6:240-350:D15": ["avt_F65", "avt_F32", "avt_F30", "avt_T66", "avt_T33"],
+            "AVT6:240-350:T50": ["avt_F7", "avt_F30", "avt_F34", "avt_F45", "avt_F59", "avt_F63"],
+            "AVT6:240-350:EBP": ["avt_F30", "avt_T33", "avt_F36", "avt_T37", "avt_T40", "avt_T58"],
+            "AVT6:240-350:CFPP": ["avt_T33", "avt_P67", "avt_P4", "avt_F65", "avt_F32", "avt_F30"],
+            "AVT6:350:T50": ["avt_T42", "avt_T48", "avt_F31", "avt_F57", "avt_T66", "avt_T33"],
+            "AVT6:350:I350": ["avt_L43", "avt_T6", "avt_T18", "avt_F64", "avt_T15", "avt_T11"],
+            "AVT6:350:D15": ["avt_T42", "avt_T48", "avt_F31", "avt_F57"],
+            "AVT6:350:CFPP": ["avt_T48", "avt_T40", "avt_F31", "avt_F57"],
+            "AVT6:350-500:ViscosityK": ["avt_T6", "avt_T13", "avt_T18", "avt_T20", "avt_L43", "avt_T48", "avt_P50", "avt_F53", "avt_P51", "avt_F59", "avt_T61"],
         }
     )
     units: dict[str, str] = field(

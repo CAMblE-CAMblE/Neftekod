@@ -47,8 +47,8 @@ def main() -> None:
         if args.save_prepared and not config.data.prepared_path:
             from quality_agent.data import load_sources
 
-            telemetry, pak, lims = load_sources(config)
-            frame = build_base_frame(telemetry, pak, lims, config)
+            telemetry, avt, pak, lims = load_sources(config)
+            frame = build_base_frame(telemetry, pak, lims, config, avt_df=avt)
             write_table(frame, args.save_prepared)
             if config.data.output_lims_path:
                 write_table(extract_output_lims(lims, config), config.data.output_lims_path)

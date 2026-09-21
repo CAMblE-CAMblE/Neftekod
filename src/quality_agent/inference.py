@@ -14,20 +14,35 @@ from .model import load_model_bundle
 
 
 CONTROL_PARAMETER_INFO = {
-    "T6": {
+    "hdt_T6": {
         "name": "температура на входе реактора",
         "unit": "°C",
         "note": "управляющий параметр сценарной диагностики",
     },
-    "F9": {
+    "hdt_F9": {
         "name": "массовый расход сырья",
         "unit": "т/ч",
         "note": "управляющий параметр сценарной диагностики; единицу нужно подтвердить по промышленному справочнику тегов",
     },
-    "P13": {
+    "hdt_P13": {
         "name": "давление на входе реактора",
         "unit": "МПа",
         "note": "управляющий параметр сценарной диагностики",
+    },
+    "avt_T6": {
+        "name": "Температура низа К-1",
+        "unit": "°C",
+        "note": "АВТ-6; справочник `теги АВТ_24-2000.xlsx`, лист `АВТ`.",
+    },
+    "avt_F7": {
+        "name": "Расход обессоленной нефти, 3-й ход в Т-4/2",
+        "unit": "т/ч",
+        "note": "АВТ-6; участвует в AVT6:240-350:T50.",
+    },
+    "avt_F9": {
+        "name": "Расход обессоленной нефти, 2-й ход в Т-10/2",
+        "unit": "т/ч",
+        "note": "АВТ-6; хранится отдельно от hdt_F9.",
     },
 }
 
@@ -137,9 +152,9 @@ def predict_diagnostic_grid(
         for f9 in f9_values:
             for p13 in p13_values:
                 candidate = dict(base)
-                candidate["T6"] = float(t6)
-                candidate["F9"] = float(f9)
-                candidate["P13"] = float(p13)
+                candidate["hdt_T6"] = float(t6)
+                candidate["hdt_F9"] = float(f9)
+                candidate["hdt_P13"] = float(p13)
                 candidate["input_sulfur_mg_kg"] = float(scenario_input_sulfur_mg_kg)
                 candidate["candidate_id"] = candidate_id
                 candidates.append(candidate)
@@ -151,9 +166,9 @@ def predict_diagnostic_grid(
             "candidate_id": frame["candidate_id"],
             "source_state_time": pd.to_datetime(frame["state_time"]),
             "input_sulfur_mg_kg": frame["input_sulfur_mg_kg"],
-            "T6": frame["T6"],
-            "F9": frame["F9"],
-            "P13": frame["P13"],
+            "T6": frame["hdt_T6"],
+            "F9": frame["hdt_F9"],
+            "P13": frame["hdt_P13"],
             "predicted_sulfur_mg_kg": prediction["predicted_sulfur_mg_kg"],
         }
     )
@@ -168,6 +183,7 @@ def predict_from_sources(
     telemetry_df: pd.DataFrame,
     bundle: QualityModelBundle,
     *,
+    avt_df: pd.DataFrame | None = None,
     pak_df: pd.DataFrame | None = None,
     lims_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
@@ -178,7 +194,7 @@ def predict_from_sources(
     обучении.
     """
 
-    frame = build_base_frame(telemetry_df, pak_df, lims_df, bundle.config)
+    frame = build_base_frame(telemetry_df, pak_df, lims_df, bundle.config, avt_df=avt_df)
     return predict_frame(frame, bundle)
 
 
@@ -197,7 +213,9 @@ def assess_scenario(
     пригодности на истории.
     """
 
-    allowed_controls = {"T6", "F9", "P13"}
+    aliases = {"T6": "hdt_T6", "F9": "hdt_F9", "P13": "hdt_P13"}
+    control_changes = {aliases.get(name, name): value for name, value in control_changes.items()}
+    allowed_controls = {"hdt_T6", "hdt_F9", "hdt_P13"}
     unknown = sorted(set(control_changes) - allowed_controls)
     if unknown:
         return {"status": "invalid_arguments", "message": f"Недопустимые управляющие параметры: {unknown}"}

@@ -1,140 +1,142 @@
-# Комплект агента качества для оптимизатора
+# Комплект агента качества АВТ + гидроочистка
 
-Обученный агент качества `first_quality_current` для
-диагностической оценки вариантов режима. Модель работает в режиме `current`:
-прогноз относится к текущему состоянию, а не к будущему горизонту.
+Актуальный запуск модели: `artifacts/quality_agent/first_quality_current`.
 
-Сценарная сетка исследует реакцию регрессии на заданные входы. В конфиге сохранено
-`inference.allow_scenario_assessment: false`.
+Модель работает в режиме `current`: прогноз относится к текущему состоянию установки. Отдельная задержка процесса в модели не моделируется. Оценка измененных режимов имеет исследовательский статус: это реакция регрессии на подготовленный вход, а не доказанный физический эффект и не производственная рекомендация.
 
-## Состав файлов
+## Что передать
 
-- `artifacts/quality_agent/first_quality_current/model.cbm` - CatBoost-модель.
-- `artifacts/quality_agent/first_quality_current/config.json` - фактически использованный конфиг.
-- `artifacts/quality_agent/first_quality_current/feature_names.json` - точный порядок признаков.
-- `artifacts/quality_agent/first_quality_current/metadata.json` - run_id, split-периоды, версии зависимостей.
-- `artifacts/quality_agent/first_quality_current/metrics.json` - метрики.
-- `artifacts/quality_agent/first_quality_current/feature_importance.csv` - важности признаков.
-- `src/quality_agent/` и `quality_formulas.py` - инференс, подготовка признаков и формулы ВАК.
-- `examples/quality_agent/first_quality_current/sample_states.csv` - маленький пример реальных состояний.
-- `examples/quality_agent/first_quality_current/model_input_preview.csv` - фактические входы модели с целью.
-- `examples/quality_agent/first_quality_current/feature_descriptions.csv` - описание признаков.
-- `examples/quality_agent/first_quality_current/single_prediction.csv` - результат одиночного примера.
-- `examples/quality_agent/first_quality_current/grid_predictions.csv` - результат диагностической сетки.
-- `scripts/predict_quality.py` - одиночный/пакетный прогноз по подготовленным состояниям.
-- `scripts/predict_quality_grid.py` - диагностическая сетка T6/F9/P13.
-- `requirements-quality-agent.txt` - минимальные зависимости для запуска агента.
+Минимальный комплект для обычного инференса:
 
+- `artifacts/quality_agent/first_quality_current/model.cbm`
+- `artifacts/quality_agent/first_quality_current/config.json`
+- `artifacts/quality_agent/first_quality_current/feature_names.json`
+- `artifacts/quality_agent/first_quality_current/metrics.json`
+- `artifacts/quality_agent/first_quality_current/feature_importance.csv`
+- `artifacts/quality_agent/first_quality_current/metadata.json`
+- `artifacts/quality_agent/first_quality_current/baseline.json`
+- `examples/quality_agent/first_quality_current/base_state.csv`
+- `src/quality_agent/`
+- `src/quality_agent/orchestrator_adapter.py`, если нужен ответ в контракте оркестратора
+- `quality_formulas.py`
+- `avt6_formulas.py`
+- `requirements-quality-agent.txt`
+- `docs/quality_agent_handoff.md`
+
+Для пересборки обучающего датасета дополнительно нужны:
+
+- `scripts/build_quality_dataset.py`
+- `configs/quality_agent.yaml`
+- `lims_parser.py`
+- `pak_parser.py`
+- исходные файлы из `configs/quality_agent.yaml`:
+  - `E:/ITMO/Хакатон_Нефтекод/Нефтекод_2.0/data/242000_tags.csv`
+  - `E:/ITMO/Хакатон_Нефтекод/Нефтекод_2.0/data/avt_tags.csv`
+  - `E:/ITMO/Хакатон_Нефтекод/Нефтекод_2.0/Выгрузка ПАК 01.01.2023 - н.в_.xlsx`
+  - `E:/ITMO/Хакатон_Нефтекод/Нефтекод_2.0/ЛИМСы 01.01.2023 - н.в_ (2).xlsx`
+
+Команда текущей сборки датасета:
+
+```powershell
+py scripts/build_quality_dataset.py `
+  --config configs/quality_agent.yaml `
+  --output data/processed/quality_dataset.parquet `
+  --output-lims data/processed/quality_output_lims.parquet `
+  --report data/processed/quality_dataset_report.json
+```
+
+Для обычного пакетного прогноза полные исходные датасеты не нужны: достаточно модели, кода и входной таблицы состояний.
 
 ## Установка
 
 ```powershell
-py -m venv venv
-.\venv\Scripts\Activate.ps1
 py -m pip install -r requirements-quality-agent.txt
 ```
 
-Если окружение проекта уже установлено, достаточно:
+Если используется общий проектный environment, зависимости качества также входят в `requirements.txt`.
 
-```powershell
-py -m pip install -r requirements.txt
-```
+## Базовое состояние
 
-## Один прогноз
+Файл `examples/quality_agent/first_quality_current/base_state.csv` содержит одну реальную строку validation-периода: `2025-07-16 06:30:00`.
 
-```powershell
-py scripts/predict_quality.py `
-  --model-dir artifacts/quality_agent/first_quality_current `
-  --input examples/quality_agent/first_quality_current/sample_states.csv `
-  --output examples/quality_agent/first_quality_current/single_prediction.csv
-```
+Строка выбрана по полноте и качеству данных: есть сигналы гидроочистки и АВТ, `avt_match_status=exact`, есть входящая сера, D15 и 95%.T с возрастом `20.5` часа, stale-флаги ложные, подтвержденного rejected-измерения цели нет. Участок выбран как относительно спокойный по локальной изменчивости основных сигналов, без подбора под прогноз или чувствительность.
 
-Результат появляется в `examples/quality_agent/first_quality_current/single_prediction.csv`.
+Целевые поля, выходящая сера ПАК/ЛИМС и заранее сохраненный прогноз в `base_state.csv` не входят. Для сравнения по исходному датасету в этот момент: измеренная `target_sulfur_mg_kg = 9.014893`, базовый прогноз текущей модели `8.575980 мг/кг`.
 
-## Диагностическая сетка
+## Пакетный инференс
 
-Параметры сценария:
+Имена сигналов используют префиксы `hdt_` для гидроочистки и `avt_` для АВТ. Расчетные показатели ВАК напрямую менять не нужно: они пересчитываются внутри `prepare_features(...)`, которую вызывает штатный `predict_frame(...)`.
 
-- `--input-sulfur` - входящая лабораторная сера, мг/кг.
-- `--t6-values` - T6, температура на входе реактора, °C.
-- `--f9-values` - F9, массовый расход сырья, т/ч.
-- `--p13-values` - P13, давление на входе реактора, МПа.
-
-Диапазоны примера являются опциональными, условными `sample_states.csv`. Технологические ограничения нужно подключать
-по подтвержденному источнику ограничений.
-
-```powershell
-py scripts/predict_quality_grid.py `
-  --model-dir artifacts/quality_agent/first_quality_current `
-  --input examples/quality_agent/first_quality_current/sample_states.csv `
-  --output examples/quality_agent/first_quality_current/grid_predictions.csv `
-  --state-index 0 `
-  --input-sulfur 8325.999975 `
-  --t6-values 352,354,356 `
-  --f9-values 150,155,160 `
-  --p13-values 3.70,3.82,3.95
-```
-
-CSV содержит:
-
-`candidate_id, source_state_time, input_sulfur_mg_kg, T6, F9, P13,
-predicted_sulfur_mg_kg, status, status_reason, assessment_scope`.
-
-Перед каждым предсказанием зависимые ВАК пересчитываются штатной подготовкой
-`prepare_features(...)`, порядок признаков берется из `feature_names.json`.
-
-## API
+Список разрешенных регулируемых параметров и технологические диапазоны задает оптимизатор. В модели нет отдельного технологического allow-list: она принимает признаки из `feature_names.json`. Для интеграционного примера ниже меняется `hdt_T6`; остальные исходные измерения копируются из базовой строки.
 
 ```python
+from pathlib import Path
+import sys
+
 import pandas as pd
 
+ROOT = Path.cwd()
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
+
 from quality_agent.data import read_table
-from quality_agent.inference import load_bundle, predict_frame, predict_diagnostic_grid
+from quality_agent.features import prepare_features
+from quality_agent.inference import load_bundle, predict_frame
 
-bundle = load_bundle("artifacts/quality_agent/first_quality_current")
-states = read_table("examples/quality_agent/first_quality_current/sample_states.csv")
+MODEL_DIR = ROOT / "artifacts/quality_agent/first_quality_current"
+BASE_STATE = ROOT / "examples/quality_agent/first_quality_current/base_state.csv"
 
-single = predict_frame(states.head(1), bundle)
+bundle = load_bundle(MODEL_DIR)
+base = read_table(BASE_STATE).iloc[0].to_dict()
 
-grid = predict_diagnostic_grid(
-    bundle,
-    states.iloc[0],
-    scenario_input_sulfur_mg_kg=8325.999975,
-    t6_values=[352, 354, 356],
-    f9_values=[150, 155, 160],
-    p13_values=[3.70, 3.82, 3.95],
-)
+candidates = []
+for candidate_id, hdt_t6 in enumerate([base["hdt_T6"], base["hdt_T6"] + 2.0]):
+    row = dict(base)
+    row["candidate_id"] = candidate_id
+    row["hdt_T6"] = hdt_t6
+    candidates.append(row)
+
+candidate_frame = pd.DataFrame(candidates)
+
+# Необязательная проверка интеграции: значение дошло до X, ВАК пересчитались.
+X, _, _ = prepare_features(candidate_frame, bundle.config, feature_names=bundle.feature_names)
+assert X.loc[1, "hdt_T6"] == candidate_frame.loc[1, "hdt_T6"]
+assert X.loc[0, "hdt_T50"] != X.loc[1, "hdt_T50"]
+
+prediction = predict_frame(candidate_frame, bundle)
+result = candidate_frame[["candidate_id"]].join(prediction)
+print(result[["candidate_id", "state_time", "predicted_sulfur_mg_kg", "limit_exceeded"]])
 ```
 
-## Зафиксированные результаты
+Фактический ответ `predict_frame(...)`:
 
-- CatBoost MAE на test относительно Q21: `1.4406 мг/кг`, примерно `1.44 мг/кг`.
-- Проверка test относительно `211` лабораторных анализов выходной серы:
-  MAE `1.8150 мг/кг`, примерно `1.81 мг/кг`.
-- Эти ошибки описывают историческую проверку. 
+- `state_time`
+- `prediction_time`
+- `predicted_sulfur_mg_kg` в `мг/кг`
+- `sulfur_limit_mg_kg`
+- `limit_exceeded`
+- `missing_or_stale_inputs`
+- `model_version`
+- `assumptions`
+- `interval_status`
+- `violation_probability_status`
 
-## Важные допущения
+Связь результата с сеткой оптимизатора делается по позиции строк или через внешний `candidate_id`, как в примере выше.
 
-- Цель: выходящая сера `Q21`, мг/кг.
-- `Q20` и `Q21` исключены из `X`.
-- Подтвержденные ошибочные значения `Q21=307` исключены из цели, исходное
-  измерение сохранено для трассировки.
-- Данные разделены по времени: train до `2025-07-08 19:00:00`, validation до
-  `2026-01-21 21:30:00`, test с `2026-01-21 21:40:00`.
-- Лабораторные результаты учитываются только по времени доступности
-  `available_at`.
-- Входящая лабораторная сера доступна примерно в половине строк.
-- Неизвестные назначения и единицы части технологических тегов отмечены в
-  `feature_descriptions.csv` как требующие уточнения.
+## Метрики текущей модели
 
-## Что должен проверить оптимизатор
+Целевая величина: сера на выходе гидроочистки, `мг/кг`.
 
-- Подтвержденные технологические ограничения T6/F9/P13 и остальных связанных
-  параметров.
-- Достоверность сценарной чувствительности модели при изменении режима, а не
-  только историческую ошибку.
-- Область применимости: не выходят ли кандидаты за распределение обучающих
-  данных и физически допустимые режимы.
-- Согласование единиц F9 и P13 по промышленному справочнику тегов.
-- Правила обработки пропусков ЛИМС и максимально допустимый возраст входящей
-  серы для онлайн-работы.
+- CatBoost test MAE: `1.5454 мг/кг`
+- CatBoost test RMSE: `2.3325 мг/кг`
+- Проверка test против выходного ЛИМС: `211` анализов, MAE `1.8460 мг/кг`, RMSE `2.8681 мг/кг`
+- Baseline median test MAE: `3.2364 мг/кг`
+
+## Ограничения
+
+- Модель и `config.json` должны загружаться из одного каталога запуска.
+- Порядок признаков берется из `feature_names.json`.
+- Входящая сера `% масс.` при сборке датасета переводится в `мг/кг`.
+- ЛИМС присоединяется backward join по времени доступности; при отсутствии `available_at` используется допущение `sample_time + 4 часа`.
+- Максимальный возраст входящего анализа сейчас `240` часов; настройка помечена как экспериментальная.
+- Подтвержденное ошибочное значение `hdt_Q21 = 307` исключается из целевой переменной при подготовке данных.

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pandas as pd
 
 from quality_formulas import AvtGodtTags, compute_all
+from avt6_formulas import Avt6Tags, compute_all as compute_avt6_all
 
 from .config import QualityAgentConfig
 
@@ -77,21 +79,26 @@ def add_calculated_features(frame: pd.DataFrame, config: QualityAgentConfig) -> 
     needed = allowed_calculated_features(config)
     if not needed:
         return out
-    required = set(AvtGodtTags.__dataclass_fields__)
+    hdt_required = set(AvtGodtTags.__dataclass_fields__)
+    avt_required = set(Avt6Tags.__dataclass_fields__)
     values: dict[str, list[float]] = {name: [] for name in needed}
     for _, row in out.iterrows():
-        tags = AvtGodtTags(**{field: _safe_float(row.get(field)) for field in required})
+        hdt_tags = AvtGodtTags(**{field: _safe_float(row.get(f"hdt_{field}", row.get(field))) for field in hdt_required})
         t95_pipeline = _safe_float(row.get("pipeline_95pct_t"))
         d15_pipeline = _safe_float(row.get("pipeline_d15"))
-        all_values = compute_all(
-            tags,
+        all_values: dict[str, float] = {}
+        hdt_values = compute_all(
+            hdt_tags,
             lims_95pct_t_pipeline=t95_pipeline if not math.isnan(t95_pipeline) else None,
             lims_d15_pipeline=d15_pipeline if not math.isnan(d15_pipeline) else None,
         )
+        all_values.update({f"hdt_{name}": value for name, value in hdt_values.items()})
+        avt_tags = Avt6Tags(**{field: _safe_float(row.get(f"avt_{field}")) for field in avt_required})
+        all_values.update(compute_avt6_all(avt_tags))
         for name in needed:
             values[name].append(all_values.get(name, float("nan")))
     for name, column in values.items():
-        out[name] = column
+        out[name] = pd.to_numeric(pd.Series(column, index=out.index), errors="coerce").replace([np.inf, -np.inf], np.nan)
     out.attrs["calculated_feature_origin"] = {
         name: config.features.calculated_feature_sources.get(name, []) for name in needed
     }
@@ -130,10 +137,28 @@ def prepare_features(
     missing = [name for name in names if name not in enriched.columns]
     for name in missing:
         enriched[name] = pd.NA
-    X = enriched[names].apply(pd.to_numeric, errors="coerce")
+    X = enriched[names].apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
     diagnostics = {
         "missing_features": missing,
         "forbidden_features": sorted(forbidden & set(frame.columns)),
         "calculated_features": allowed_calculated_features(config),
     }
     return X, names, diagnostics
+
+
+def train_feature_exclusions(X_train: pd.DataFrame) -> dict[str, list[str]]:
+    """Определяет признаки, которые нельзя фиксировать в X по обучающей выборке.
+
+    Вход: матрица train после всех расчетных преобразований. Выход: списки
+    полностью пустых и постоянных признаков. Существенное условие: проверка
+    выполняется только на train, чтобы validation/test не влияли на состав X.
+    """
+
+    all_missing = [name for name in X_train.columns if X_train[name].isna().all()]
+    constant = []
+    for name in X_train.columns:
+        if name in all_missing:
+            continue
+        if X_train[name].dropna().nunique() <= 1:
+            constant.append(name)
+    return {"all_missing": all_missing, "constant": constant}

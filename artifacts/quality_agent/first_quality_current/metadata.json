@@ -23,8 +23,8 @@
     "pandas": "3.0.5",
     "catboost": "1.2.10"
   },
-  "git_revision": "50f493725fae561739c3e85a135375b516464564",
-  "dataset_checksum": "74c69e93ef919a5f23182ad5c3651030889fe63ef4dd65bd1edc3097b8915ed1",
+  "git_revision": "160efaac92f97ec5e9bd95b5f527975a7716f2fe",
+  "dataset_checksum": "4b7d7c6d1edd7546a5e1b935d5421ee115fb04ce3abf10425069a4377613e989",
   "feature_units": {
     "input_sulfur_mg_kg": "мг/кг",
     "input_sulfur_age_hours": "ч",
@@ -37,64 +37,140 @@
     "max_input_age_hours": 240.0,
     "max_input_age_is_experimental": true,
     "calculated_feature_sources": {
-      "T90": [
-        "F1",
-        "F15",
-        "F26",
-        "T12",
-        "T23",
-        "W7"
+      "hdt_T90": [
+        "hdt_F1",
+        "hdt_F15",
+        "hdt_F26",
+        "hdt_T12",
+        "hdt_T23",
+        "hdt_W7"
       ],
-      "T50": [
-        "F9",
-        "P13",
-        "T6"
+      "hdt_T50": [
+        "hdt_F9",
+        "hdt_P13",
+        "hdt_T6"
       ],
-      "I250": [
-        "F14",
-        "F25",
-        "T5",
-        "T11",
-        "T16",
-        "T23"
+      "hdt_I250": [
+        "hdt_F14",
+        "hdt_F25",
+        "hdt_T5",
+        "hdt_T11",
+        "hdt_T16",
+        "hdt_T23"
       ],
-      "IBP": [
-        "F14",
-        "F22",
-        "F26",
-        "P13",
-        "P24",
-        "T16",
-        "T23",
-        "W4"
+      "hdt_IBP": [
+        "hdt_F14",
+        "hdt_F22",
+        "hdt_F26",
+        "hdt_P13",
+        "hdt_P24",
+        "hdt_T16",
+        "hdt_T23",
+        "hdt_W4"
       ],
-      "CloudPoint": [
-        "F1",
-        "F9",
-        "F22",
-        "F25",
-        "T6",
-        "T16",
-        "W7"
+      "hdt_CloudPoint": [
+        "hdt_F1",
+        "hdt_F9",
+        "hdt_F22",
+        "hdt_F25",
+        "hdt_T6",
+        "hdt_T16",
+        "hdt_W7"
       ],
-      "CFPP": [
-        "F9",
-        "P8",
-        "P24",
-        "T23",
-        "W7"
+      "hdt_CFPP": [
+        "hdt_F9",
+        "hdt_P8",
+        "hdt_P24",
+        "hdt_T23",
+        "hdt_W7"
       ],
-      "T95": [
-        "F2",
-        "F9",
-        "T6",
+      "hdt_T95": [
+        "hdt_F2",
+        "hdt_F9",
+        "hdt_T6",
         "LIMS:Гидроочистка:1:95%.T"
       ],
-      "D15": [
-        "F22",
-        "T11",
+      "hdt_D15": [
+        "hdt_F22",
+        "hdt_T11",
         "LIMS:Гидроочистка:1:D15"
+      ],
+      "AVT6:240-350:D15": [
+        "avt_F65",
+        "avt_F32",
+        "avt_F30",
+        "avt_T66",
+        "avt_T33"
+      ],
+      "AVT6:240-350:T50": [
+        "avt_F7",
+        "avt_F30",
+        "avt_F34",
+        "avt_F45",
+        "avt_F59",
+        "avt_F63"
+      ],
+      "AVT6:240-350:EBP": [
+        "avt_F30",
+        "avt_T33",
+        "avt_F36",
+        "avt_T37",
+        "avt_T40",
+        "avt_T58"
+      ],
+      "AVT6:240-350:CFPP": [
+        "avt_T33",
+        "avt_P67",
+        "avt_P4",
+        "avt_F65",
+        "avt_F32",
+        "avt_F30"
+      ],
+      "AVT6:350:T50": [
+        "avt_T42",
+        "avt_T48",
+        "avt_F31",
+        "avt_F57",
+        "avt_T66",
+        "avt_T33"
+      ],
+      "AVT6:350:I350": [
+        "avt_L43",
+        "avt_T6",
+        "avt_T18",
+        "avt_F64",
+        "avt_T15",
+        "avt_T11"
+      ],
+      "AVT6:350:D15": [
+        "avt_T42",
+        "avt_T48",
+        "avt_F31",
+        "avt_F57"
+      ],
+      "AVT6:350:CFPP": [
+        "avt_T48",
+        "avt_T40",
+        "avt_F31",
+        "avt_F57"
+      ],
+      "AVT6:350-500:ViscosityK": [
+        "avt_T6",
+        "avt_T13",
+        "avt_T18",
+        "avt_T20",
+        "avt_L43",
+        "avt_T48",
+        "avt_P50",
+        "avt_F53",
+        "avt_P51",
+        "avt_F59",
+        "avt_T61"
       ]
+    },
+    "train_exclusions": {
+      "all_missing": [],
+      "constant": []
     }
   }
 }

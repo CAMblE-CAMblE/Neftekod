@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - проверяется сообщен�
 from .config import QualityAgentConfig, config_to_dict
 from .data import dataset_checksum, extract_output_lims
 from .evaluation import evaluate_against_lims, regression_metrics
-from .features import prepare_features
+from .features import prepare_features, train_feature_exclusions
 
 
 @dataclass
@@ -130,6 +130,11 @@ def train_model(
     run_dir.mkdir(parents=True, exist_ok=True)
     splits = chronological_split(frame, config)
     X_train, feature_names, train_diag = prepare_features(splits["train"], config)
+    train_exclusions = train_feature_exclusions(X_train)
+    excluded_features = sorted(set(train_exclusions["all_missing"]) | set(train_exclusions["constant"]))
+    if excluded_features:
+        feature_names = [name for name in feature_names if name not in excluded_features]
+        X_train = X_train[feature_names]
     target_col = config.data.target_col
     y_train = splits["train"][target_col]
     model = CatBoostRegressor(
@@ -148,7 +153,11 @@ def train_model(
     model.fit(X_train, y_train, eval_set=eval_set)
     baseline = MedianBaseline(float(y_train.median()))
 
-    metrics: dict[str, object] = {"catboost": {}, "baseline": {}, "diagnostics": train_diag}
+    metrics: dict[str, object] = {
+        "catboost": {},
+        "baseline": {},
+        "diagnostics": {**train_diag, "train_exclusions": train_exclusions},
+    }
     predictions = []
     for name, split in splits.items():
         if split.empty:
@@ -214,6 +223,7 @@ def train_model(
             "max_input_age_hours": config.lims.max_input_age_hours,
             "max_input_age_is_experimental": config.lims.max_input_age_is_experimental,
             "calculated_feature_sources": config.features.calculated_feature_sources,
+            "train_exclusions": train_exclusions,
         },
     }
     (run_dir / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -259,8 +269,8 @@ def train_from_sources(config: QualityAgentConfig, *, run_id: str | None = None)
         else:
             output_lims = pd.DataFrame()
     else:
-        telemetry, pak, lims = load_sources(config)
-        frame = build_base_frame(telemetry, pak, lims, config)
+        telemetry, avt, pak, lims = load_sources(config)
+        frame = build_base_frame(telemetry, pak, lims, config, avt_df=avt)
         output_lims = extract_output_lims(lims, config)
     return train_model(
         frame,

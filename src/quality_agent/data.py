@@ -71,7 +71,7 @@ def write_table(df: pd.DataFrame, path: str | Path) -> None:
     raise ValueError(f"Неподдерживаемый формат сохранения: {path}")
 
 
-def load_sources(config: QualityAgentConfig) -> tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame | None]:
+def load_sources(config: QualityAgentConfig) -> tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None]:
     """Загружает исходные источники проекта.
 
     Вход: конфигурация с путями telemetry, ПАК и ЛИМС. Выход: три датафрейма,
@@ -80,12 +80,13 @@ def load_sources(config: QualityAgentConfig) -> tuple[pd.DataFrame, pd.DataFrame
     """
 
     telemetry = read_table(config.data.telemetry_path)
+    avt = read_table(config.data.avt_telemetry_path) if config.data.avt_telemetry_path else None
     pak = parse_pak(config.data.pak_path) if config.data.pak_path else None
     lims = parse_lims(config.data.lims_path) if config.data.lims_path else None
-    return telemetry, pak, lims
+    return telemetry, avt, pak, lims
 
 
-def normalize_telemetry(df: pd.DataFrame, config: QualityAgentConfig) -> pd.DataFrame:
+def normalize_telemetry(df: pd.DataFrame, config: QualityAgentConfig, *, prefix: str | None = None) -> pd.DataFrame:
     """Приводит телеметрию 24-2000 к каноническому времени состояния.
 
     Вход: таблица `242000_tags.csv` или подготовленная таблица с аналогичными
@@ -105,7 +106,63 @@ def normalize_telemetry(df: pd.DataFrame, config: QualityAgentConfig) -> pd.Data
     out["state_time"] = to_datetime_ns(out["state_time"], fmt=config.data.timestamp_format).to_numpy()
     if out["state_time"].isna().any():
         raise ValueError("В телеметрии есть строки с нераспознанным временем")
+    if prefix:
+        rename = {name: f"{prefix}_{name}" for name in out.columns if name != "state_time" and not str(name).startswith(f"{prefix}_")}
+        out = out.rename(columns=rename)
     return out.sort_values("state_time").reset_index(drop=True)
+
+
+def attach_avt_telemetry(frame: pd.DataFrame, avt_df: pd.DataFrame | None, config: QualityAgentConfig) -> pd.DataFrame:
+    """Присоединяет АВТ к основной сетке гидроочистки без будущих измерений.
+
+    Вход: строки гидроочистки с `state_time` и сырая телеметрия АВТ. Выход:
+    таблица с колонками `avt_*`, `avt_source_time`, `avt_match_age_minutes`
+    и диагностикой соединения в `attrs["avt_join_report"]`.
+    """
+
+    out = frame.sort_values("state_time").copy()
+    if avt_df is None:
+        out.attrs["avt_join_report"] = {
+            "mode": "missing_source",
+            "matched_rows": 0,
+            "unmatched_rows": int(len(out)),
+            "unmatched_share": 1.0 if len(out) else 0.0,
+            "future_measurements_used": False,
+        }
+        return out
+
+    avt = normalize_telemetry(avt_df, config, prefix="avt")
+    if avt["state_time"].duplicated().any():
+        duplicates = int(avt["state_time"].duplicated().sum())
+        raise ValueError(f"АВТ содержит дубли временных меток: {duplicates}")
+    avt = avt.rename(columns={"state_time": "avt_source_time"})
+    exact = len(out) == len(avt) and out["state_time"].reset_index(drop=True).equals(avt["avt_source_time"].reset_index(drop=True))
+    if exact:
+        merged = out.merge(avt, left_on="state_time", right_on="avt_source_time", how="left")
+        mode = "exact"
+    else:
+        merged = pd.merge_asof(
+            out.sort_values("state_time"),
+            avt.sort_values("avt_source_time"),
+            left_on="state_time",
+            right_on="avt_source_time",
+            direction="backward",
+            tolerance=pd.Timedelta(minutes=config.data.avt_asof_tolerance_minutes),
+        )
+        mode = "backward_asof"
+    merged["avt_match_age_minutes"] = (merged["state_time"] - merged["avt_source_time"]) / pd.Timedelta(minutes=1)
+    matched = merged["avt_source_time"].notna()
+    merged["avt_match_status"] = matched.map({True: mode, False: "unmatched"})
+    merged.attrs["avt_join_report"] = {
+        "mode": mode,
+        "tolerance_minutes": config.data.avt_asof_tolerance_minutes,
+        "matched_rows": int(matched.sum()),
+        "unmatched_rows": int((~matched).sum()),
+        "unmatched_share": float((~matched).mean()) if len(merged) else 0.0,
+        "max_age_minutes": None if not matched.any() else float(merged.loc[matched, "avt_match_age_minutes"].max()),
+        "future_measurements_used": False,
+    }
+    return merged.sort_values("state_time").reset_index(drop=True)
 
 
 def canonicalize_pak(pak_df: pd.DataFrame | None, config: QualityAgentConfig) -> pd.DataFrame:
@@ -242,18 +299,19 @@ def attach_q21_target(frame: pd.DataFrame, config: QualityAgentConfig) -> pd.Dat
     условие: current берет Q21 из той же строки без заполнения соседями.
     """
 
-    if "Q21" not in frame.columns:
-        raise ValueError("Для первого обучения нужна колонка Q21 в телеметрии 24-2000")
+    q21_col = "hdt_Q21" if "hdt_Q21" in frame.columns else "Q21"
+    if q21_col not in frame.columns:
+        raise ValueError("Для первого обучения нужна колонка hdt_Q21 в телеметрии гидроочистки")
     out = frame.copy()
     target_col = config.data.target_col
     if config.training.mode == "current":
         out["prediction_time"] = out["state_time"]
         out["target_time"] = out["state_time"]
-        out[target_col] = pd.to_numeric(out["Q21"], errors="coerce")
+        out[target_col] = pd.to_numeric(out[q21_col], errors="coerce")
     elif config.training.mode == "forecast":
         out["prediction_time"] = out["state_time"] + forecast_horizon(config)
-        target = out[["state_time", "Q21"]].rename(
-            columns={"state_time": "target_time", "Q21": target_col}
+        target = out[["state_time", q21_col]].rename(
+            columns={"state_time": "target_time", q21_col: target_col}
         )
         target[target_col] = pd.to_numeric(target[target_col], errors="coerce")
         out = pd.merge_asof(
@@ -266,7 +324,7 @@ def attach_q21_target(frame: pd.DataFrame, config: QualityAgentConfig) -> pd.Dat
         ).sort_values("state_time")
     else:
         raise ValueError("training.mode должен быть 'current' или 'forecast'")
-    out[config.data.target_source_col] = "telemetry:Q21:ppm"
+    out[config.data.target_source_col] = f"telemetry:{q21_col}:ppm"
     out["target_unit"] = "мг/кг"
     out = apply_confirmed_q21_rejections(out, config)
     out["target_sulfur_above_10_mg_kg"] = out[target_col] > 10.0
@@ -321,16 +379,19 @@ def build_base_frame(
     pak_df: pd.DataFrame | None,
     lims_df: pd.DataFrame | None,
     config: QualityAgentConfig,
+    *,
+    avt_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Собирает канонический подготовленный датафрейм.
 
-    Вход: телеметрия 24-2000, необязательный ПАК и ЛИМС. Выход: датафрейм с
-    временем состояния, целью Q21, входящей серой ЛИМС и ВАК-входами.
-    Существенное условие: для агента качества используется непосредственно
-    телеметрия 24-2000, без объединения с АВТ.
+    Вход: телеметрия гидроочистки, необязательные АВТ, ПАК и ЛИМС. Выход:
+    датафрейм с временем состояния, целью hdt_Q21, входящей серой ЛИМС,
+    сигналами обеих установок и ВАК-входами.
     """
 
-    frame = attach_q21_target(normalize_telemetry(telemetry_df, config), config)
+    frame = attach_q21_target(normalize_telemetry(telemetry_df, config, prefix="hdt"), config)
+    frame = attach_avt_telemetry(frame, avt_df, config)
+    avt_join_report = frame.attrs.get("avt_join_report", {})
     input_lims = canonicalize_lims_parameter(
         lims_df,
         sampling_point=config.data.input_lims_sampling_point,
@@ -376,7 +437,9 @@ def build_base_frame(
     pak = canonicalize_pak(pak_df, config)
     if not pak.empty:
         frame = attach_pak_comparison(frame, pak, config)
-    return frame.sort_values("state_time").reset_index(drop=True)
+    frame = frame.sort_values("state_time").reset_index(drop=True)
+    frame.attrs["avt_join_report"] = avt_join_report
+    return frame
 
 
 def extract_output_lims(lims_df: pd.DataFrame | None, config: QualityAgentConfig) -> pd.DataFrame:
