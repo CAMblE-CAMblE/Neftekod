@@ -1,0 +1,78 @@
+{
+  "catboost": {
+    "train": {
+      "mae": 1.1324807922054456,
+      "rmse": 1.7890824758280022,
+      "mean_signed_error": -0.0006442057196459562,
+      "n": 127994
+    },
+    "validation": {
+      "mae": 1.1825684410302166,
+      "rmse": 1.9393412196515265,
+      "mean_signed_error": -0.15816283246853532,
+      "n": 28195
+    },
+    "test": {
+      "mae": 1.5454350826679315,
+      "rmse": 2.332533086226525,
+      "mean_signed_error": 0.07731012694286107,
+      "n": 27410
+    }
+  },
+  "baseline": {
+    "train": {
+      "mae": 1.4404108862398683,
+      "rmse": 2.584884100724817,
+      "mean_signed_error": -0.08935868764953814,
+      "n": 127994
+    },
+    "validation": {
+      "mae": 1.3208496775389682,
+      "rmse": 2.298192667343688,
+      "mean_signed_error": -0.6058494758558441,
+      "n": 28195
+    },
+    "test": {
+      "mae": 3.236402221249375,
+      "rmse": 6.075807491699767,
+      "mean_signed_error": -1.9304905014291314,
+      "n": 27410
+    }
+  },
+  "diagnostics": {
+    "missing_features": [],
+    "forbidden_features": [
+      "hdt_Q20",
+      "hdt_Q21"
+    ],
+    "calculated_features": [
+      "hdt_T90",
+      "hdt_T50",
+      "hdt_I250",
+      "hdt_IBP",
+      "hdt_CloudPoint",
+      "hdt_CFPP",
+      "hdt_T95",
+      "hdt_D15",
+      "AVT6:240-350:D15",
+      "AVT6:240-350:T50",
+      "AVT6:240-350:EBP",
+      "AVT6:240-350:CFPP",
+      "AVT6:350:T50",
+      "AVT6:350:I350",
+      "AVT6:350:D15",
+      "AVT6:350:CFPP",
+      "AVT6:350-500:ViscosityK"
+    ],
+    "train_exclusions": {
+      "all_missing": [],
+      "constant": []
+    }
+  },
+  "output_lims_test": {
+    "mae": 1.8460083486297811,
+    "rmse": 2.8681123337328125,
+    "mean_signed_error": 0.5453629793328284,
+    "n": 211
+  }
+}
