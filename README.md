@@ -34,6 +34,7 @@ requirements.txt        общие зависимости для всего ре
    ```
 4. Для `run_pipeline.py` дополнительно нужна папка `data/` в корне
    (`242000_tags.csv`, `avt_tags.csv` — не в git из-за размера) 
+   подготовленный датасет `data/processed/quality_dataset.parquet`
    и файл `quality_agent_package/model/model.cbm` (веса CatBoost).
 
 ## Демо на заглушках (`demo.py`)
@@ -59,3 +60,14 @@ python run_pipeline.py
 По ходу печатает прогресс `[1/6]`...`[6/6]`. На последнем шаге (LLM) может
 занимать несколько минут на CPU — таймаут в `orchestrator/llm_client.py`
 сейчас 300 секунд.
+
+## UI для пайплайна
+
+Streamlit-экран берет исторические состояния из `data.prepared_path` в
+`quality/configs/quality_agent.yaml`. По умолчанию это
+`data/processed/quality_dataset.parquet`; при необходимости путь можно
+переопределить переменной окружения `NEFTEKOD_QUALITY_DATASET`.
+
+```bash
+streamlit run quality/app/simulator_app.py
+```

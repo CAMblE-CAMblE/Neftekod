@@ -10,6 +10,7 @@ data/
 !**/sample_data/*.csv
 optimizer/logs/*.csv
 optimizer/logs/*.png
+optimizer/logs/*.log
 data/processed/
 .cache/
 .idea/

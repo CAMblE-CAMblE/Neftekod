@@ -1,258 +1,262 @@
-"""Streamlit-интерфейс демонстрационного симулятора гидроочистки."""
+"""Streamlit-интерфейс запуска готового пайплайна оптимизации."""
 
 from __future__ import annotations
 
+import logging
 import sys
-from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from simulator.scenario import (  # noqa: E402
-    evaluate_baseline,
-    load_demo_states,
-    load_simulator_config,
-    run_recommendation,
-    run_time_simulation,
+from run_pipeline import (  # noqa: E402
+    DATASET_ENV_VAR,
+    available_state_times,
+    estimate_pipeline_runtime_minutes,
+    estimate_scenario_count,
+    format_recommendation_text,
+    get_state_by_timestamp,
+    load_quality_bundle,
+    load_state_dataset,
+    predict_current_quality,
+    resolve_dataset_path,
+    run_pipeline,
 )
-from simulator.state import CandidateAction, ControlSettings, HistoricalState, Recommendation, SimulationResult  # noqa: E402
-from simulator.visualization import sulfur_trajectory_chart  # noqa: E402
 
-
-CONFIG_PATH = ROOT / "configs" / "simulator.yaml"
-STATES_PATH = ROOT / "data" / "simulator" / "demo_states.yaml"
+LOG_PATH = PROJECT_ROOT / "optimizer" / "logs" / "ui_errors.log"
+LOGGER = logging.getLogger(__name__)
 
 
 def main() -> None:
-    """Запускает одностраничный интерфейс симулятора."""
+    """Запускает простой экран выбора состояния и оптимизации."""
 
-    st.set_page_config(page_title="Система расчета регулирования работы ABT", layout="wide")
-    st.title("Система расчета регулирования работы ABT")
-    st.caption("Данные, модель")
+    st.set_page_config(page_title="Оптимизация гидроочистки", layout="centered")
+    _inject_styles()
+    _configure_logging()
+    _ensure_session_state()
 
-    base_config = load_simulator_config(CONFIG_PATH)
-    states = load_demo_states(STATES_PATH)
-    _ensure_session_state(states[0].id, states[0].sulfur_in)
+    st.title("Оптимизация работы ABT и Гидроочистки")
 
-    with st.sidebar:
-        st.header("Сценарий")
-        selected_id = st.selectbox(
-            "Исходный режим",
-            options=[state.id for state in states],
-            format_func=lambda value: _state_by_id(states, value).name,
-            key="selected_state_id",
+    dataset_path = _resolve_dataset_path_for_ui()
+    if dataset_path is None:
+        return
+
+    try:
+        dataset = _load_dataset_cached(str(dataset_path), dataset_path.stat().st_mtime)
+        bundle = _load_bundle_cached()
+        times = available_state_times(dataset)
+    except Exception as exc:
+        LOGGER.exception("Не удалось подготовить данные UI")
+        st.error(f"Не удалось загрузить данные: {exc}")
+        return
+
+    if not times:
+        st.error("В датасете нет доступных временных меток.")
+        return
+
+    st.subheader("Выбор состояния системы")
+    selected_timestamp = _render_time_selector(times, disabled=st.session_state.optimization_running)
+    _clear_result_when_timestamp_changed(selected_timestamp)
+
+    st.caption(f"Выбранная временная метка: {selected_timestamp:%Y-%m-%d %H:%M:%S}")
+
+    state = None
+    prediction = None
+    estimated_minutes = None
+    try:
+        state = get_state_by_timestamp(dataset, selected_timestamp)
+        prediction = predict_current_quality(state, bundle=bundle)
+        sulfur = float(prediction.iloc[0]["predicted_sulfur_mg_kg"])
+        st.metric("Прогноз серы для текущего состояния, мг/кг", f"{sulfur:.2f}")
+        scenario_count = estimate_scenario_count(state)
+        estimated_minutes = estimate_pipeline_runtime_minutes(state)
+        scenario_count_text = f"{scenario_count:,}".replace(",", " ")
+        st.caption(
+            f"Оценка расчета: около {_format_minutes(estimated_minutes)} "
+            f"для {scenario_count_text} сценариев."
         )
-        selected_state = _state_by_id(states, selected_id)
-        if st.session_state.active_state_id != selected_id:
-            st.session_state.active_state_id = selected_id
-            st.session_state.input_sulfur = float(selected_state.sulfur_in)
-            st.session_state.baseline_quality = None
-            st.session_state.recommendation = None
-            st.session_state.candidates = []
-            st.session_state.simulation_result = None
-        input_sulfur = st.slider(
-            "Входящая сера, мг/кг",
-            min_value=300.0,
-            max_value=900.0,
-            value=float(st.session_state.get("input_sulfur", selected_state.sulfur_in)),
-            step=10.0,
-            key="input_sulfur",
+        warnings = prediction.iloc[0].get("missing_or_stale_inputs") or []
+        if warnings:
+            st.warning("Прогноз рассчитан с предупреждениями: " + "; ".join(warnings))
+    except Exception as exc:
+        LOGGER.exception("Не удалось рассчитать текущий прогноз серы")
+        st.error(f"Выбранное состояние невозможно обработать: {exc}")
+
+    can_run = state is not None and prediction is not None and not st.session_state.optimization_running
+    if st.button("Оптимизировать", type="primary", disabled=not can_run, use_container_width=True):
+        _run_optimization(selected_timestamp, state, estimated_minutes)
+
+    st.subheader("Рекомендация")
+    if st.session_state.recommendation_text:
+        st.text_area(
+            "Итоговый текст LLM",
+            value=st.session_state.recommendation_text,
+            height=280,
+            label_visibility="collapsed",
         )
-        sulfur_limit = st.number_input(
-            "Заданный предел серы, мг/кг",
-            min_value=1.0,
-            max_value=30.0,
-            value=float(base_config.sulfur_limit_mg_kg),
-            step=0.5,
-            key="sulfur_limit",
-        )
-        config = replace(base_config, sulfur_limit_mg_kg=float(sulfur_limit))
-        _invalidate_when_inputs_changed(selected_state.id, input_sulfur, sulfur_limit)
-
-        if st.button("Оценить изменение сырья", use_container_width=True):
-            st.session_state.baseline_quality = evaluate_baseline(selected_state, input_sulfur, config)
-            st.session_state.simulation_result = None
-
-        if st.button("Подобрать режим", use_container_width=True):
-            st.session_state.baseline_quality = evaluate_baseline(selected_state, input_sulfur, config)
-            recommendation, candidates = run_recommendation(selected_state, input_sulfur, config)
-            st.session_state.recommendation = recommendation
-            st.session_state.candidates = candidates
-            st.session_state.simulation_result = None
-
-        if st.button("Применить рекомендацию", use_container_width=True):
-            recommendation = st.session_state.get("recommendation")
-            if recommendation and recommendation.candidate:
-                st.session_state.simulation_result = run_time_simulation(
-                    selected_state,
-                    input_sulfur,
-                    recommendation.candidate.controls,
-                    config,
-                )
-            else:
-                st.warning("Сначала подберите допустимый режим.")
-
-        if st.button("Сбросить сценарий", use_container_width=True):
-            _reset_session(selected_state.id, selected_state.sulfur_in)
-            st.rerun()
-
-    _render_state_summary(selected_state)
-    _render_metrics(selected_state, config.sulfur_limit_mg_kg)
-    _render_controls_table(selected_state, st.session_state.get("recommendation"))
-    _render_chart(st.session_state.get("simulation_result"), config.sulfur_limit_mg_kg)
-    _render_decision_block(st.session_state.get("recommendation"), st.session_state.get("simulation_result"))
+    elif st.session_state.error_message:
+        st.error(st.session_state.error_message)
+    else:
+        st.info("Рекомендация появится после завершения расчета.")
 
 
-def _ensure_session_state(default_state_id: str, default_sulfur: float) -> None:
-    """Инициализирует ключи состояния Streamlit."""
+def _configure_logging() -> None:
+    """Настраивает файл ошибок UI один раз за процесс."""
+
+    if LOGGER.handlers:
+        return
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(logging.INFO)
+
+
+def _inject_styles() -> None:
+    """Добавляет минимальные стили для основного действия."""
+
+    st.markdown(
+        """
+        <style>
+        div.stButton > button[kind="primary"] {
+            background-color: #0ea5e9;
+            border-color: #0284c7;
+            color: #ffffff;
+        }
+        div.stButton > button[kind="primary"]:hover {
+            background-color: #0284c7;
+            border-color: #0369a1;
+            color: #ffffff;
+        }
+        div.stButton > button[kind="primary"]:focus {
+            box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.25);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _ensure_session_state() -> None:
+    """Инициализирует состояние экрана Streamlit."""
 
     defaults = {
-        "selected_state_id": default_state_id,
-        "active_state_id": default_state_id,
-        "input_sulfur": float(default_sulfur),
-        "last_signature": None,
-        "baseline_quality": None,
-        "recommendation": None,
-        "candidates": [],
-        "simulation_result": None,
+        "selected_timestamp": None,
+        "recommendation_text": None,
+        "error_message": None,
+        "optimization_running": False,
+        "optimization_timestamp": None,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
 
-def _invalidate_when_inputs_changed(state_id: str, input_sulfur: float, sulfur_limit: float) -> None:
-    """Сбрасывает устаревшие расчеты после изменения режима или сырья."""
+def _resolve_dataset_path_for_ui() -> Path | None:
+    """Показывает понятную ошибку, если путь к датасету не настроен."""
 
-    signature = (state_id, float(input_sulfur), float(sulfur_limit))
-    if st.session_state.get("last_signature") is None:
-        st.session_state.last_signature = signature
-        return
-    if st.session_state.last_signature != signature:
-        st.session_state.baseline_quality = None
-        st.session_state.recommendation = None
-        st.session_state.candidates = []
-        st.session_state.simulation_result = None
-        st.session_state.last_signature = signature
-
-
-def _reset_session(state_id: str, input_sulfur: float) -> None:
-    """Возвращает сценарий к начальному состоянию."""
-
-    st.session_state.input_sulfur = float(input_sulfur)
-    st.session_state.active_state_id = state_id
-    st.session_state.last_signature = (state_id, float(input_sulfur), st.session_state.get("sulfur_limit"))
-    st.session_state.baseline_quality = None
-    st.session_state.recommendation = None
-    st.session_state.candidates = []
-    st.session_state.simulation_result = None
-
-
-def _state_by_id(states: list[HistoricalState], state_id: str) -> HistoricalState:
-    """Находит исходное состояние по идентификатору."""
-
-    for state in states:
-        if state.id == state_id:
-            return state
-    raise ValueError(f"Неизвестное состояние: {state_id}")
-
-
-def _render_state_summary(state: HistoricalState) -> None:
-    """Показывает исходные данные выбранного режима."""
-
-    with st.expander("Исходное состояние", expanded=False):
-        cols = st.columns(5)
-        cols[0].metric("Время", state.timestamp)
-        cols[1].metric("Входящая сера", f"{state.sulfur_in:.0f} мг/кг")
-        cols[2].metric("T6, температура ГСС на входе", f"{state.controls.t6:.1f}")
-        cols[3].metric("F9, расход сырья на установку, массовый", f"{state.controls.f9:.1f}")
-        cols[4].metric("P13, давление на входе", f"{state.controls.p13:.2f}")
-
-
-def _render_metrics(state: HistoricalState, sulfur_limit: float) -> None:
-    """Выводит основные показатели сценария."""
-
-    baseline_quality = st.session_state.get("baseline_quality")
-    recommendation: Recommendation | None = st.session_state.get("recommendation")
-    recommended_q21 = recommendation.candidate.quality.predicted_q21 if recommendation and recommendation.candidate else None
-
-    cols = st.columns(4)
-    cols[0].metric("Исходная выходная сера", f"{state.q21:.2f} мг/кг")
-    cols[1].metric(
-        "Новое сырье, текущий режим",
-        _format_q21(baseline_quality.predicted_q21 if baseline_quality else None),
-    )
-    cols[2].metric("После рекомендации", _format_q21(recommended_q21))
-    cols[3].metric("Заданный предел", f"{sulfur_limit:.2f} мг/кг")
-
-
-def _render_controls_table(state: HistoricalState, recommendation: Recommendation | None) -> None:
-    """Показывает сравнение исходного режима и рекомендации."""
-
-    recommended = recommendation.candidate.controls if recommendation and recommendation.candidate else None
-    rows = []
-    for label, original, new_value in [
-        ("T6", state.controls.t6, recommended.t6 if recommended else None),
-        ("F9", state.controls.f9, recommended.f9 if recommended else None),
-        ("P13", state.controls.p13, recommended.p13 if recommended else None),
-    ]:
-        rows.append(
-            {
-                "Параметр": label,
-                "Исходный режим": original,
-                "Рекомендация": new_value,
-                "Изменение": None if new_value is None else new_value - original,
-            }
+    try:
+        return resolve_dataset_path()
+    except Exception as exc:
+        LOGGER.exception("Не удалось определить путь к датасету")
+        st.error(f"Не удалось определить путь к датасету: {exc}")
+        st.info(
+            "Укажите путь в quality/configs/quality_agent.yaml -> data.prepared_path "
+            f"или переменной окружения {DATASET_ENV_VAR}."
         )
-    st.subheader("Сравнение режима")
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        return None
 
 
-def _render_chart(result: SimulationResult | None, sulfur_limit: float) -> None:
-    """Показывает график временной симуляции или подсказку."""
+@st.cache_data(show_spinner=False)
+def _load_dataset_cached(path: str, mtime: float) -> pd.DataFrame:
+    """Кеширует подготовленный датасет между действиями UI."""
 
-    st.subheader("Временная симуляция")
-    if result is None:
-        st.info("Нажмите «Применить рекомендацию», чтобы построить траектории на 3 часа.")
+    return load_state_dataset(path)
+
+
+@st.cache_resource(show_spinner=False)
+def _load_bundle_cached():
+    """Кеширует CatBoost bundle между действиями UI."""
+
+    return load_quality_bundle()
+
+
+def _render_time_selector(times: list[pd.Timestamp], disabled: bool) -> pd.Timestamp:
+    """Рисует выбор даты и времени из существующих меток датасета."""
+
+    dates = sorted({item.date() for item in times})
+    selected_date = st.selectbox(
+        "Дата",
+        options=dates,
+        format_func=lambda value: value.strftime("%Y-%m-%d"),
+        disabled=disabled,
+    )
+
+    day_times = [item for item in times if item.date() == selected_date]
+    selected_time = st.selectbox(
+        "Время",
+        options=day_times,
+        format_func=lambda value: value.strftime("%H:%M:%S"),
+        disabled=disabled,
+    )
+    return pd.Timestamp(selected_time)
+
+
+def _clear_result_when_timestamp_changed(selected_timestamp: pd.Timestamp) -> None:
+    """Очищает старую рекомендацию при смене временной метки."""
+
+    if st.session_state.selected_timestamp == selected_timestamp:
         return
-    st.plotly_chart(sulfur_trajectory_chart(result, sulfur_limit), use_container_width=True)
+    st.session_state.selected_timestamp = selected_timestamp
+    st.session_state.recommendation_text = None
+    st.session_state.error_message = None
+    st.session_state.optimization_timestamp = None
 
 
-def _render_decision_block(recommendation: Recommendation | None, result: SimulationResult | None) -> None:
-    """Показывает результат решения и проверки агентов."""
+def _run_optimization(
+    selected_timestamp: pd.Timestamp,
+    state: pd.Series,
+    estimated_minutes: int | None,
+) -> None:
+    """Запускает пайплайн для выбранной строки датасета."""
 
-    st.subheader("Результат решения")
-    if recommendation is None:
-        st.info("Решение еще не сформировано.")
-        return
+    st.session_state.optimization_running = True
+    st.session_state.optimization_timestamp = selected_timestamp
+    st.session_state.recommendation_text = None
+    st.session_state.error_message = None
 
-    candidate: CandidateAction | None = recommendation.candidate
-    if candidate is None:
-        st.error(recommendation.status)
-        st.write(recommendation.explanation)
-        return
+    try:
+        spinner_text = "Выполняется расчет..."
+        if estimated_minutes is not None:
+            spinner_text = f"Выполняется расчет... расчет займет около {_format_minutes(estimated_minutes)}."
+        with st.spinner(spinner_text):
+            recommendation = run_pipeline(
+                selected_timestamp.to_pydatetime(),
+                base_state=state.copy(),
+            )
+        st.session_state.recommendation_text = format_recommendation_text(recommendation)
+    except Exception as exc:
+        LOGGER.exception("Ошибка запуска пайплайна из UI")
+        st.session_state.error_message = f"Расчет не выполнен: {exc}. Подробности записаны в {LOG_PATH}."
+    finally:
+        st.session_state.optimization_running = False
 
-    st.success(recommendation.status)
-    st.write(recommendation.explanation)
-    st.write(f"Проверка качества: Q21 = {candidate.quality.predicted_q21:.2f} мг/кг.")
-    st.write("Проверка оборудования: " + " ".join(candidate.reliability.reasons))
-    if result:
-        col1, col2 = st.columns(2)
-        col1.metric("Время выше предела: исходный режим", f"{result.baseline_time_above_limit_minutes} мин")
-        col2.metric("Время выше предела: рекомендация", f"{result.recommended_time_above_limit_minutes} мин")
 
+def _format_minutes(minutes: int) -> str:
+    """Форматирует оценку времени расчета для интерфейса."""
 
-def _format_q21(value: float | None) -> str:
-    """Форматирует Q21 для метрик интерфейса."""
-
-    if value is None:
-        return "не рассчитано"
-    return f"{value:.2f} мг/кг"
+    if 11 <= minutes % 100 <= 14:
+        suffix = "минут"
+    elif minutes % 10 == 1:
+        suffix = "минуту"
+    elif 2 <= minutes % 10 <= 4:
+        suffix = "минуты"
+    else:
+        suffix = "минут"
+    return f"{minutes} {suffix}"
 
 
 if __name__ == "__main__":
