@@ -15,7 +15,7 @@ assess(timestamp) -> dict в формате контракта `reliability`
 from __future__ import annotations
 from pathlib import Path
 import yaml
-from .constraints import compute_constraints
+from .constraints import compute_constraints, load_hard_bounds
 from .data_access import TelemetrySource
 from .severity import compute_severity
 from .state_detector import detect_state
@@ -24,7 +24,7 @@ _HERE = Path(__file__).parent
 
 class ReliabilityAgent:
     def __init__(self, config_path: str | Path | None = None) -> None:
-        cfg_path = Path(config_path) if config_path else _HERE / "config.yaml"
+        cfg_path = Path(config_path) if config_path else _HERE / "config" / "config.yaml"
         with open(cfg_path, encoding="utf-8") as f:
             self.cfg = yaml.safe_load(f)
         d = self.cfg["data"]
@@ -35,6 +35,11 @@ class ReliabilityAgent:
         self._avt_path = root / d["avt_csv"]
         self._avt_cache = root / d["cache_dir"]
         self._avt: TelemetrySource | None = None
+
+        # границы взятые по тех.справочнику и тех.регламенту АВТ6
+        cc = self.cfg.get("constraints", {})
+        bounds_csv = cc.get("hard_bounds_csv")
+        self._hard_bounds = load_hard_bounds(root / bounds_csv, cc.get("include_avt", False)) if bounds_csv else {}
 
     @property
     def avt(self) -> TelemetrySource:
@@ -72,7 +77,7 @@ class ReliabilityAgent:
         sev = compute_severity(history, row, cfg, drift_z=drift_z)
 
         # Блок C: коридоры
-        constraints, cons_assumptions = compute_constraints(history, cfg, sev.risk_index)
+        constraints, cons_assumptions = compute_constraints(history, cfg, sev.risk_index, hard_bounds=self._hard_bounds)
 
         return {
             "risk_index": sev.risk_index,
@@ -174,7 +179,6 @@ class ReliabilityAgent:
     def assess_candidates(self, timestamp, candidates) -> list[dict]:
         """Пакетная оценка сетки кандидатов в одной точке"""
         return [self.assess_candidate(timestamp, c) for c in candidates]
-
 
 def assess(timestamp, config_path: str | Path | None = None) -> dict:
     return ReliabilityAgent(config_path).assess(timestamp)
