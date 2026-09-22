@@ -24,7 +24,7 @@ _HERE = Path(__file__).parent
 
 class ReliabilityAgent:
     def __init__(self, config_path: str | Path | None = None) -> None:
-        cfg_path = Path(config_path) if config_path else _HERE / "config.yaml"
+        cfg_path = Path(config_path) if config_path else _HERE / "config" / "config.yaml"
         with open(cfg_path, encoding="utf-8") as f:
             self.cfg = yaml.safe_load(f)
         d = self.cfg["data"]
