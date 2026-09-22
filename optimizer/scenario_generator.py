@@ -3,8 +3,8 @@ import itertools
 import pandas as pd
 
 
-N_STEPS = 3
-STEP_FRACTION = 0.05
+N_STEPS = 5
+STEP_FRACTION = 0.025
 
 
 def generate_scenarios(
