@@ -1,3 +1,16 @@
+.venv/
 venv/
-.idea/
 __pycache__/
+*.pyc
+data/
+*.xlsx
+*.csv
+!optimizer/examples/*.csv
+!**/examples/*.csv
+!**/sample_data/*.csv
+optimizer/logs/*.csv
+optimizer/logs/*.png
+data/processed/
+.cache/
+.idea/
+.vscode/

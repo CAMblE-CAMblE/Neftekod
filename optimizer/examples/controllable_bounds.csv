@@ -1,0 +1,6 @@
+parameter,lower_bound,upper_bound
+avt_T6,180,360.0
+avt_F12,300,450.0
+hdt_W4,0,5
+hdt_T12,150,200
+hdt_F25,10000,20000
