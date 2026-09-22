@@ -8,6 +8,7 @@ data/
 !optimizer/examples/*.csv
 !**/examples/*.csv
 !**/sample_data/*.csv
+!reliability/controllable_bounds.csv
 optimizer/logs/*.csv
 optimizer/logs/*.png
 data/processed/

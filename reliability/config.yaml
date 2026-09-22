@@ -59,8 +59,10 @@ constraints:
   #   ht_feed_flow_m3h     -> F15  (расход сырья объёмный)
   #   ht_pressure_mpa      -> P13  (давление входа реактора)
   #   ht_gas_oil_ratio     -> F25  (свежий ВСГ; отношение к сырью)
-  # Симулятор команды перебирает кандидатов по T6/F9/P13 -> держим их коридоры (F9 добавлен к F15).
-  control_tags_u242: ["T6", "F9", "F15", "P13", "F25"]
+  control_tags_u242: ["T6", "F9", "F15", "P13", "F25", "W4", "T5", "T12", "F22"]
+  hard_bounds_csv: "reliability/controllable_bounds.csv"
+  # override = границы Даниила главные; intersect = пересечь с перцентилем
+  hard_bounds_mode: "override"
   # АВТ, "У" на схеме: T печи + P колонны (+ верх колонны).
   #   avt_furnace_outlet_temp_c -> T55, avt_column_pressure -> P2, avt_column_top_temp_c -> T1
   # ОТЛОЖЕНО: коридоры АВТ считаются только при include_avt=true И переданной телеметрии АВТ.
