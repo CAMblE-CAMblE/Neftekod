@@ -6,3 +6,5 @@ openpyxl>=3.1
 pyarrow>=14.0
 matplotlib>=3.7
 streamlit>=1.30
+plotly>=5.22
+pytest>=8.0
