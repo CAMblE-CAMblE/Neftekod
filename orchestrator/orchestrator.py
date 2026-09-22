@@ -71,7 +71,6 @@ class Orchestrator:
             problem_or_risk=parsed.get("problem_or_risk", ""),
             action=parsed.get("action"),
             expected_effect=parsed.get("expected_effect", ""),
-            constraints_checked=constraints_checked,
             confidence=parsed.get("confidence", ""),
             explanation=parsed.get("explanation", ""),
             is_actionable=True,
@@ -85,7 +84,6 @@ class Orchestrator:
             problem_or_risk=reason,
             action=None,
             expected_effect="—",
-            constraints_checked=[reason],
             confidence="низкая",
             explanation=(
                 "Надёжной рекомендации нет: " + reason + ". "

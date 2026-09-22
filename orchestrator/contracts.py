@@ -100,7 +100,6 @@ class Recommendation:
     problem_or_risk: str
     action: str | None                          # None, если рекомендаций нет
     expected_effect: str
-    constraints_checked: list[str]
     confidence: str
     explanation: str
     is_actionable: bool                          # False -> «надёжной рекомендации нет»
