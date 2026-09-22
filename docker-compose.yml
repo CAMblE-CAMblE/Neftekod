@@ -1,0 +1,41 @@
+version: "3"
+
+volumes:
+  ollama:
+    driver: local
+  config-quality:
+    driver: local
+  config-reliability:
+    driver: local
+
+services:
+
+  ollama:
+    image: ollama/ollama:0.34.3-rc1
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+    ports:
+      - 8080:8501
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+  
+  ollama-pull-init:
+    image: curlimages/curl:8.22.0
+    command: ["-sf", "-XPOST", "http://ollama:11434/api/pull", "-d", "{\"name\": \"llama3\"}"]
+    restart: "no"
+    depends_on:
+      - ollama
+
+  llm-web:
+    image: vanchello/deep_thinkers:latest
+    depends_on:
+      - ollama
+      - ollama-pull-init
+    restart: always
+    volumes:
+      - /opt/data:/pipeline/data
+      - config-quality:/pipeline/quality_agent_package/config
+      - config-reliability:/pipeline/reliability/config
+    network_mode: "service:ollama"

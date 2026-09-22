@@ -71,3 +71,48 @@ Streamlit-экран берет исторические состояния из
 ```bash
 streamlit run quality/app/simulator_app.py
 ```
+
+# Запуск в Docker 
+
+## Вручную 
+
+1. Необходимо подготовить директорию /opt/data: поместить в нее файлы `242000_tags.csv`, `avt_tags.csv`, `data/processed/quality_dataset.parquet`
+
+2. Выполнить загрузку образа ollama и web-llm
+
+```
+docker pull ollama/ollama
+docker pull vanchello/deep_thinkers:latest
+```
+
+3. Выполнить запуск контейнера ollama
+
+```
+docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama --network host ollama/ollama
+docker exec -it ollama ollama pull llama3
+```
+
+4. Выполнить запуск контейнера llm-web
+
+```
+docker run -d -v config-quality:/pipeline/quality_agent_package/config -v config-reliability:/pipeline/reliability/config \
+-p 8501:8501 --name llm-web --network host vanchello/deep_thinkers
+```
+
+5. Открыть веб-интерфейс по адресу http://localhost:8501
+
+## С помощью docker-compose 
+
+1. Проверить что на ВМ установлен docker-compose-v2
+
+2. Подготовить директорию /opt/data: поместить в нее файлы `242000_tags.csv`, `avt_tags.csv`, `data/processed/quality_dataset.parquet`
+
+3. Выполнить в директории с файлом docker-compose.yml
+
+```
+docker compose up -d 
+```
+
+4. Дождаться старта всех контейнеров и окончания работы ollama-pull-init
+
+5. Открыть веб-интерфейс по адресу http://localhost:8501

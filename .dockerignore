@@ -1,0 +1,4 @@
+demo.py
+README.md
+.*
+!quality/app/simulator_app.py
